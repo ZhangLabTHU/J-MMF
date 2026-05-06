@@ -5,30 +5,28 @@
 A lightweight, installation-free toolkit for **Hyperdynamics (HD) molecular
 dynamics** simulations, with a unified runner for Cu(100) surface diffusion.
 
-> **HDkit is a companion code repository for a paper currently under review.**
-> It is intended for reproducing and verifying the paper's results —
+> **HDkit is companion code for a paper currently under review.**
+> It is provided to reproduce and verify the paper's results —
 > **not for production simulations.**
 
-> **Operating System**: This toolkit is designed for **Linux and macOS** only.
-> Windows is not supported.  Windows users are recommended to install
-> [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) (Windows
-> Subsystem for Linux) and run the toolkit inside an Ubuntu environment.
+> **Operating System**: Linux and macOS only.  Windows users should install
+> [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) first.
 
-This repository accompanies the paper and provides:
+This repository accompanies the paper and includes:
 
-- **`HDkit/`** — A streamlined Python package containing the core HD calculators
+- **`HDkit/`** — A streamlined Python package with the core HD calculators
   (Bond-Boost, MMF, BasinManager).
-- **`run_compare.py`** — Compares the bias from all three HD methods on the same
-  structure in a single step.
-- **`run_hd.py`** — Runs multi-step HD-MD using Bond-Boost, MMF, or J-MMF.
+- **`run_compare.py`** — Single-step comparison of the bias from all three HD
+  methods on the same structure.
+- **`run_hd.py`** — Multi-step HD-MD using Bond-Boost, MMF, or J-MMF.
 
-> **Note**: HDkit is a **simplified reference implementation** of the algorithms
-> described in our paper.  It focuses on correctness of the core methods; some
-> engineering details (error recovery, MPI support, production-grade I/O) are
-> deliberately kept minimal.  The simulation lengths in the examples
-> (BB: 10 ns; MMF/J-MMF: 100 ps) are chosen so that users can verify the
-> code runs end-to-end in minutes to hours — the results reported in
-> the paper require substantially longer runs (µs scale) on HPC resources.
+> **Note**: HDkit is a **simplified reference implementation** of the
+> algorithms described in our paper.  It focuses on correctness of the core
+> methods; engineering details (error recovery, MPI support, production-grade
+> I/O) are deliberately kept minimal.  The example simulation lengths
+> (BB: 10 ns; MMF/J-MMF: 100 ps) let you verify end-to-end correctness in
+> minutes to hours.  The results reported in the paper require substantially
+> longer runs (µs scale) on HPC resources.
 
 ---
 
@@ -52,13 +50,13 @@ This repository accompanies the paper and provides:
 
 ### Repository Setup
 
-**Option 1 — Download the latest release** (no Git needed):
+**Option 1 — Download a release** (no Git needed):
 
 > [![Release](https://img.shields.io/github/v/release/ZhangLabTHU/HDkit-example?color=blue)](https://github.com/ZhangLabTHU/HDkit-example/releases)
 >
-> Go to the [Releases page](https://github.com/ZhangLabTHU/HDkit-example/releases)
-> and download `HDkit-example-v1.0.0.zip` or `.tar.gz`.  Extract the
-> archive and enter the directory — you are ready to go.
+> Go to the [Releases page](https://github.com/ZhangLabTHU/HDkit-example/releases),
+> download `HDkit-example-v1.0.0.zip` or `.tar.gz`, extract, and enter the
+> directory.
 
 **Option 2 — Clone with Git**:
 
@@ -88,9 +86,8 @@ The repository contains everything needed to run the examples:
 | `CHANGELOG.md` | Release notes |
 | `Makefile` | Build release archives (`make release`) |
 
-> **No installation required** — `HDkit/` is a lightweight package that
-> lives in the project root.  As long as you run scripts from this
-> directory, `import HDkit` works without any path configuration.
+> **No installation required**.  `HDkit/` lives in the project root and
+> `import HDkit` works as long as you run scripts from this directory.
 
 ### Environment Setup
 
@@ -104,7 +101,7 @@ The repository contains everything needed to run the examples:
 > only.  Windows users should install
 > [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) first.
 
-We recommend a dedicated conda environment.  Create it with one command:
+We recommend a dedicated conda environment:
 
 ```bash
 conda create -n HDkit -c conda-forge python=3.11 ase lammps -y
@@ -117,7 +114,7 @@ conda activate HDkit
 python verify.py
 ```
 
-If all checks pass, you are ready to run the examples.
+If all checks pass, you are ready to go.
 
 ---
 
@@ -330,12 +327,12 @@ and Lanczos convergence check is recorded.
 
 **HDkit** is a lightweight Hyperdynamics toolkit extracted from
 **[DLTS](https://github.com/ZhangLabTHU/Hyperdynamics)** (Deep Long Time
-Simulation package) — a larger project developed by
+Simulation package), a larger project developed by
 [ZhangLab](https://www.zhanglab-thu.com) for long-time-scale dynamics
 simulations.  DLTS encompasses multiple methods spanning both molecular
 dynamics (Hyperdynamics) and adaptive kinetic Monte Carlo (aKMC).  HDkit
-contains only the Hyperdynamics-related code from DLTS, streamlined for
-ease of use and reproducibility.
+contains only the Hyperdynamics-related code from DLTS, streamlined for ease
+of use and reproducibility.
 
 - **ZhangLab homepage**: <https://www.zhanglab-thu.com>
 - **ZhangLab on GitHub**: [@ZhangLabTHU](https://github.com/ZhangLabTHU)
@@ -350,16 +347,14 @@ The Hyperdynamics code in both HDkit and DLTS was written by
 
 ### Paper Status
 
-This repository is a companion to a paper currently under review.
-The paper link and recommended citation format will be added here
-after publication.
+This repository is companion code for a paper currently under review.
+The paper link and recommended citation will be added after publication.
 
 ---
 
 ## License
 
-This code is provided **solely for verifying and reproducing the results
-of the accompanying paper**.  It is a simplified reference implementation
-and is **not intended for production molecular dynamics simulations**.
-Please cite the relevant references (see above) if you use this toolkit
-in your work.
+This code is provided **solely for verifying and reproducing the results of
+the accompanying paper**.  It is a simplified reference implementation and is
+**not intended for production molecular dynamics simulations**.  Please cite
+the relevant references (see above) if you use this toolkit in your work.
