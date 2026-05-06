@@ -40,7 +40,15 @@ This repository accompanies the paper and provides:
 
 ### Repository Setup
 
-Clone the repository and enter the project directory:
+**Option 1 — Download the latest release** (no Git needed):
+
+> [![Release](https://img.shields.io/github/v/release/ZhangLabTHU/HDkit-example?color=blue)](https://github.com/ZhangLabTHU/HDkit-example/releases)
+>
+> Go to the [Releases page](https://github.com/ZhangLabTHU/HDkit-example/releases)
+> and download `HDkit-example-v1.0.0.zip` or `.tar.gz`.  Extract the
+> archive and enter the directory — you are ready to go.
+
+**Option 2 — Clone with Git**:
 
 ```bash
 git clone https://github.com/ZhangLabTHU/HDkit-example.git
@@ -58,6 +66,8 @@ The repository contains everything needed to run the examples:
 | `hd-ini.traj` | Initial structure for HD simulations |
 | `compare-ini.traj` | Initial structure for bias comparison |
 | `Cu_u3.eam` | Cu EAM potential file |
+| `CHANGELOG.md` | Release notes |
+| `Makefile` | Build release archives (`make release`) |
 
 > **No installation required** — `HDkit/` is a lightweight package that
 > lives in the project root.  As long as you run scripts from this
@@ -114,7 +124,10 @@ If all checks pass, you are ready to run the examples.
 ├── compare-ini.traj                #   Starting structure for bias comparison
 ├── hd-ini.traj                     #   Starting structure for HD-MD
 ├── Cu_u3.eam                       #   Cu EAM potential file
-└── README.md
+├── README.md                       #   English documentation
+├── README.zh-CN.md                 #   中文文档
+├── CHANGELOG.md                    #   Release notes
+└── Makefile                        #   Build release archives (`make release`)
 ```
 
 After a run, output files are written to a subdirectory (`Climb/`, `Bond-Boost/`, `MMF/`, or `J_MMF/`).
