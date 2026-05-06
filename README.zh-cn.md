@@ -38,6 +38,15 @@
 
 ### 获取仓库
 
+**方式一 — 下载最新 Release**（无需 Git）：
+
+> [![Release](https://img.shields.io/github/v/release/ZhangLabTHU/HDkit-example?color=blue)](https://github.com/ZhangLabTHU/HDkit-example/releases)
+>
+> 前往 [Releases 页面](https://github.com/ZhangLabTHU/HDkit-example/releases)
+> 下载 `HDkit-example-v1.0.0.zip` 或 `.tar.gz`，解压后进入目录即可使用。
+
+**方式二 — 通过 Git 克隆**：
+
 ```bash
 git clone https://github.com/ZhangLabTHU/HDkit-example.git
 cd HDkit-example
@@ -54,6 +63,8 @@ cd HDkit-example
 | `hd-ini.traj` | HD 模拟初始结构 |
 | `compare-ini.traj` | 偏置对比初始结构 |
 | `Cu_u3.eam` | Cu EAM 势文件 |
+| `CHANGELOG.md` | 发布说明 |
+| `Makefile` | 构建 Release 包 (`make release`) |
 
 > **无需安装** — `HDkit/` 是一个位于项目根目录的轻量级包。
 > 只要从此目录运行脚本，`import HDkit` 即可正常工作，无需配置路径。
@@ -106,7 +117,9 @@ python verify.py
 ├── hd-ini.traj                     #   HD-MD 用初始结构
 ├── Cu_u3.eam                       #   Cu EAM 势文件
 ├── README.md                       #   英文文档
-└── README.zh-CN.md                 #   中文文档
+├── README.zh-CN.md                 #   中文文档
+├── CHANGELOG.md                    #   发布说明
+└── Makefile                        #   构建 Release 包 (`make release`)
 ```
 
 运行后，输出文件写入对应子目录（`Climb/`、`Bond-Boost/`、`MMF/` 或 `J_MMF/`）。
