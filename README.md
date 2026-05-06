@@ -1,5 +1,7 @@
 # HDkit — Hyperdynamics Example Suite
 
+[English](README.md) | [简体中文](README.zh-cn.md)
+
 A lightweight, installation-free toolkit for **Hyperdynamics (HD) molecular dynamics** simulations, with a unified runner for Cu(100) surface diffusion.
 
 > **Operating System**: This toolkit is designed for **Linux and macOS** only. Windows is not supported. Windows users are recommended to install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) (Windows Subsystem for Linux) and run the toolkit inside an Ubuntu environment.

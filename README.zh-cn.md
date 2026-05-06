@@ -1,5 +1,7 @@
 # HDkit — 超动力学示例套件
 
+[English](README.md) | [简体中文](README.zh-cn.md)
+
 一套轻量级、免安装的**超动力学 (Hyperdynamics, HD) 分子动力学**模拟工具包，为 Cu(100) 表面扩散提供了统一的运行程序。
 
 > **操作系统**：本工具包仅支持 **Linux 和 macOS**。Windows 用户请先安装 [WSL](https://learn.microsoft.com/zh-cn/windows/wsl/install)。
