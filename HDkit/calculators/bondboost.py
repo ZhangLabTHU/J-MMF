@@ -7,36 +7,40 @@ __author__ = "Qian Lixiang"
 __email__ = "649811459@qq.com"
 
 """
-Bond-Boost超动力学计算模块
+Bond-Boost Hyperdynamics Calculation Module
 
-本模块实现Bond-Boost Hyperdynamics方法，通过监测原子键应变并施加偏置势来加速稀有事件采样。
-与MMF方法相比，Bond-Boost不需要计算Hessian，计算效率更高，适合大规模系统和高温模拟。
+This module implements the Bond-Boost Hyperdynamics method, which accelerates
+rare event sampling by monitoring atomic bond strains and applying a bias
+potential. Compared to the MMF method, Bond-Boost does not require Hessian
+computation, making it more computationally efficient and suitable for
+large-scale systems and high-temperature simulations.
 
-核心原理：
-1. 识别稳态并记录初始键长
-2. MD过程中计算所有键的应变 ε_i = (r_i - r_i^0) / r_i^0
-3. 找到最大应变键 ε_m
-4. 施加偏置势 E_bias = A(ε_m) * Σ_i δV_i(ε_i)
-   - δV_i: 单键的抛物线偏置势
-   - A(ε_m): 包络函数，确保在接近过渡态时偏置势逐渐降为0
+Core Principles:
+1. Identify the basin and record initial bond lengths
+2. During MD, compute the strain of all bonds ε_i = (r_i - r_i^0) / r_i^0
+3. Find the maximum strain bond ε_m
+4. Apply a bias potential E_bias = A(ε_m) * Σ_i δV_i(ε_i)
+   - δV_i: per-bond parabolic bias potential
+   - A(ε_m): envelope function that ensures the bias potential gradually
+     reduces to zero when approaching the transition state
 
-典型用法:
+Typical usage:
     >>> from ase.calculators.emt import EMT
     >>> from ase import Atoms
     >>> from ase.md import VelocityVerlet
     >>> 
-    >>> # 创建Bond-Boost计算器
+    >>> # Create a Bond-Boost calculator
     >>> bb_calc = BondBoostCalculator(
     >>>     std_calc=EMT(),
-    >>>     emax=0.5,  # 最大偏置能量(eV)
-    >>>     cutoff=3.0,  # 键距离截断(Å)
+    >>>     emax=0.5,  # Maximum bias energy (eV)
+    >>>     cutoff=3.0,  # Bond distance cutoff (Å)
     >>>     temperature_K=300
     >>> )
     >>> 
     >>> atoms = Atoms('Cu64', ...)
     >>> atoms.calc = bb_calc
     >>> 
-    >>> # 运行超动力学MD
+    >>> # Run hyperdynamics MD
     >>> dyn = VelocityVerlet(atoms, timestep=1.0*units.fs)
     >>> dyn.run(10000)
 """
@@ -54,106 +58,122 @@ from ..basin import BasinManager
 
 class BondBoostCalculator(BaseCalculator):
     """
-    Bond-Boost Hyperdynamics偏置势计算器
+    Bond-Boost Hyperdynamics Bias Potential Calculator
     
-    通过监测原子键应变施加偏置势以加速稀有事件采样。相比MMF方法，Bond-Boost
-    不需要计算Hessian矩阵，计算效率更高，特别适合大规模系统和高温模拟。
+    Accelerates rare event sampling by monitoring atomic bond strains and
+    applying a bias potential. Compared to the MMF method, Bond-Boost does
+    not require Hessian matrix computation, making it more computationally
+    efficient and particularly suitable for large-scale systems and
+    high-temperature simulations.
     
-    算法流程：
-    1. **稳态识别**：使用BasinManager识别并记录稳态结构
-    2. **键拓扑构建**：根据cutoff参数建立键连接关系
-    3. **应变计算**：对每个键计算应变 ε_i = (r_i - r_i^0) / r_i^0
-    4. **偏置势计算**：
-       - 单键偏置：δV_i = (emax/Nb) * (1 - (ε_i/q)^2) if |ε_i| < q, else 0
-       - 总偏置基：V_b = Σ_i δV_i
-       - 包络函数：A(ε_m) = (1-(ε_m/q)^2)^2 / (1-P1^2(ε_m/q)^2)
-       - 总偏置势：E_bias = A(ε_m) * V_b
-    5. **力计算**：通过链式法则计算偏置力 F_bias = -∇E_bias
+    Algorithm flow:
+    1. **Basin identification**: use BasinManager to identify and record the
+       basin structure
+    2. **Bond topology construction**: establish bond connectivity based on
+       the cutoff parameter
+    3. **Strain calculation**: compute strain for each bond
+       ε_i = (r_i - r_i^0) / r_i^0
+    4. **Bias potential calculation**:
+       - Per-bond bias: δV_i = (emax/Nb) * (1 - (ε_i/q)^2) if |ε_i| < q, else 0
+       - Total bias base: V_b = Σ_i δV_i
+       - Envelope function: A(ε_m) = (1-(ε_m/q)^2)^2 / (1-P1^2(ε_m/q)^2)
+       - Total bias potential: E_bias = A(ε_m) * V_b
+    5. **Force calculation**: compute bias forces via the chain rule
+       F_bias = -∇E_bias
     
     Parameters
     ----------
     std_calc : Calculator
-        标准势能面计算器（如EMT, VASP等）
+        Standard PES calculator (e.g., EMT, VASP)
     
     logfile : str or file object, default='Bond.log'
-        日志输出文件
+        Log output file
     
     cutoff : float, default=3.0
-        键距离截断（Å）。两个原子距离小于cutoff时认为有键连接。
-        - 过小：遗漏部分键，可能导致偏置不足
-        - 过大：包含过多非键相互作用，降低效率
-        推荐设为第二近邻距离
+        Bond distance cutoff (Å). Atoms closer than cutoff are considered
+        bonded.
+        - Too small: may miss bonds, leading to insufficient bias
+        - Too large: includes excessive non-bonded interactions, reducing
+          efficiency
+        Recommended: set to the second-nearest-neighbor distance
     
     emax : float, default=0.5
-        最大偏置能量（eV）。控制偏置势的强度。
-        - 过小：加速效果不明显
-        - 过大：可能引入非物理行为
-        推荐范围：0.3 ~ 1.0 eV
+        Maximum bias energy (eV). Controls the strength of the bias potential.
+        - Too small: acceleration effect is not obvious
+        - Too large: may introduce non-physical behavior
+        Recommended range: 0.3 ~ 1.0 eV
     
     q : float, default=0.37
-        应变截断参数。当|ε_i| > q时，该键的偏置势为0。
-        - 较小值：偏置势在较小应变时就开始衰减（保守）
-        - 较大值：允许较大应变（激进）
-        推荐范围：0.3 ~ 0.5
+        Strain cutoff parameter. When |ε_i| > q, the bias potential for that
+        bond is zero.
+        - Smaller value: bias potential begins to decay at smaller strain
+          (conservative)
+        - Larger value: allows larger strain (aggressive)
+        Recommended range: 0.3 ~ 0.5
     
     max_q : float, default=2.0
-        最大应变阈值倍数。当ε_m > max_q*q时，认为已脱离稳态，需重新识别稳态。
+        Maximum strain threshold multiplier. When ε_m > max_q*q, the system
+        is considered to have left the basin and re-identification is needed.
     
     P1 : float, default=0.9
-        包络函数参数。控制包络函数在ε_m接近q时的衰减速度。
-        - 接近1：衰减缓慢
-        - 接近0：衰减快速
-        推荐范围：0.8 ~ 0.95
+        Envelope function parameter. Controls the decay rate of the envelope
+        function as ε_m approaches q.
+        - Near 1: slow decay
+        - Near 0: fast decay
+        Recommended range: 0.8 ~ 0.95
     
     delta : float, default=1e-6
-        数值微分步长（保留参数，当前未使用）
+        Numerical differentiation step size (reserved parameter, currently
+        unused)
     
     temperature_K : float, optional
-        系统温度（K）。用于计算加速因子ACT = exp(E_bias/kT)。
+        System temperature (K). Used to compute the boost factor
+        ACT = exp(E_bias/kT).
     
     write_basins : bool, default=True
-        是否将新发现的稳态写入'basins.traj'
+        Whether to write newly discovered basins to 'basins.traj'
     
     write_bias_log : bool, default=True
-        是否将偏置能量、温度、ACT写入'bias.log'
+        Whether to write bias energy, temperature, and ACT to 'bias.log'
     
     bias_interval : int, default=10
-        bias.log输出间隔（每N次calculate调用输出一次）
+        bias.log output interval (output every N calculate() calls)
     
     pbc_wrap : bool, default=True
-        每次calculate后是否将原子包裹到主晶胞内（保留参数，当前未使用）
+        Whether to wrap atoms into the primary cell after each calculate()
+        call (reserved parameter, currently unused)
     
     Attributes
     ----------
     bias_energy : float
-        当前的偏置能量（eV）
+        Current bias energy (eV)
     
     bias_forces : np.ndarray, shape (n_atoms, 3)
-        当前的偏置力（eV/Å）
+        Current bias forces (eV/Å)
     
     basin_id : int
-        当前所处的稳态ID
+        ID of the current basin
     
     n_bonds : int
-        当前稳态的键数量
+        Number of bonds in the current basin
     
     epsilon_m : float
-        最大键应变
+        Maximum bond strain
     
     Examples
     --------
-    基本用法：
+    Basic usage:
     
     >>> from ase.build import bulk
     >>> from ase.calculators.emt import EMT
     >>> from ase.md import VelocityVerlet
     >>> from ase import units
     >>> 
-    >>> # 创建原子结构
+    >>> # Create atomic structure
     >>> atoms = bulk('Cu', 'fcc', a=3.6).repeat((4, 4, 4))
     >>> atoms.rattle(stdev=0.05)
     >>> 
-    >>> # 创建Bond-Boost计算器
+    >>> # Create Bond-Boost calculator
     >>> bb_calc = BondBoostCalculator(
     >>>     std_calc=EMT(),
     >>>     emax=0.5,
@@ -164,7 +184,7 @@ class BondBoostCalculator(BaseCalculator):
     >>> 
     >>> atoms.calc = bb_calc
     >>> 
-    >>> # 运行超动力学MD
+    >>> # Run hyperdynamics MD
     >>> dyn = VelocityVerlet(atoms, timestep=1.0*units.fs)
     >>> for i in range(100):
     >>>     dyn.run(100)
@@ -172,9 +192,9 @@ class BondBoostCalculator(BaseCalculator):
     >>>     eps_m = bb_calc.epsilon_m
     >>>     print(f"Step {i*100}: Bias={bias_E:.3f} eV, ε_m={eps_m:.4f}")
     
-    调整参数以适应不同系统：
+    Adjusting parameters for different systems:
     
-    >>> # 高温系统，增大emax
+    >>> # High-temperature system, increase emax
     >>> bb_calc = BondBoostCalculator(
     >>>     std_calc=EMT(),
     >>>     emax=0.8,
@@ -182,7 +202,7 @@ class BondBoostCalculator(BaseCalculator):
     >>>     temperature_K=600
     >>> )
     >>> 
-    >>> # 低温系统，减小emax
+    >>> # Low-temperature system, decrease emax
     >>> bb_calc = BondBoostCalculator(
     >>>     std_calc=EMT(),
     >>>     emax=0.3,
@@ -192,13 +212,19 @@ class BondBoostCalculator(BaseCalculator):
     
     Notes
     -----
-    - calculate()返回的能量和力已包含偏置项
-    - 键拓扑在每个稳态建立一次，MD过程中保持不变
-    - 当max_q*q < ε_m时，自动尝试识别新稳态并更新键拓扑
-    - 键长计算自动考虑周期性边界条件（最小镜像约定）
-    - 偏置力通过链式法则精确计算，而非数值微分
-    - BasinManager的详细输出写入'rlx.log'
-    - Bond-Boost方法不保证时间可逆性，因此不适用于平衡态性质计算
+    - The energy and forces returned by calculate() already include the bias
+      terms
+    - Bond topology is established once per basin and remains unchanged during
+      the MD run
+    - When max_q*q < ε_m, the system automatically attempts to identify a new
+      basin and update the bond topology
+    - Bond length calculations automatically account for periodic boundary
+      conditions (minimum image convention)
+    - Bias forces are computed exactly via the chain rule, not via numerical
+      differentiation
+    - Detailed output from BasinManager is written to 'rlx.log'
+    - The Bond-Boost method does not guarantee time reversibility, so it is
+      not suitable for equilibrium property calculations
     
     References
     ----------
@@ -211,7 +237,7 @@ class BondBoostCalculator(BaseCalculator):
     """
 
     default_parameters = {
-        # 结果存储
+        # Results storage
         "basin_id": -1,
         "bias_energy": None,
         "bias_forces": None,
@@ -221,13 +247,13 @@ class BondBoostCalculator(BaseCalculator):
     def __init__(
         self,
         std_calc: Calculator,
-        # 计算器参数
+        # Calculator parameters
         cutoff: float = 3.0,
         emax: float = 0.5,
         q: float = 0.37,
         max_q: float = 2.0,
         P1: float = 0.9,
-        # 其他参数
+        # Other parameters
         temperature_K: Optional[float] = None,
         write_basins: bool = True,
         write_bias_log: bool = True,
@@ -274,44 +300,45 @@ class BondBoostCalculator(BaseCalculator):
             else DummyLogWriter()
         )
 
-        # 稳态相关参数（每个稳态更新一次）
-        self.positions0: Optional[np.ndarray] = None  # 稳态位置 (n_atoms, 3)
-        self.bond_indices: np.ndarray  # 键索引 (n_bonds, 2)
-        self.n_bonds: int = 0  # 键数量
-        self.bond_lengths0: np.ndarray  # 稳态键长 (n_bonds,)
+        # Basin-related parameters (updated once per basin)
+        self.positions0: Optional[np.ndarray] = None  # basin positions (n_atoms, 3)
+        self.bond_indices: np.ndarray  # bond indices (n_bonds, 2)
+        self.n_bonds: int = 0  # number of bonds
+        self.bond_lengths0: np.ndarray  # basin bond lengths (n_bonds,)
 
-        # MD过程中更新的参数
-        self.positions: np.ndarray  # 当前位置 (n_atoms, 3)
-        self.bond_lengths: np.ndarray  # 当前键长 (n_bonds,)
-        self.bond_vectors: np.ndarray  # 键向量 (n_bonds, 3)
-        self.epsilons: np.ndarray  # 键应变 (n_bonds,)
-        self.grad_epsilons_per_bond: np.ndarray  # 应变梯度 (n_bonds, 3)
-        self.delta_potentials: np.ndarray  # 单键偏置势 (n_bonds,)
-        self.Vb: float  # 总偏置势基数
-        self.grad_delta_potentials: np.ndarray  # 偏置势梯度 (n_bonds,)
-        self.epsilon_m_index: int  # 最大应变键索引
-        self.epsilon_m: float = 0.0  # 最大应变
-        self.grad_epsilon_m: np.ndarray  # 最大应变梯度 (3,)
-        self.A: float  # 包络函数值
-        self.grad_A: float  # 包络函数梯度
-        self.bias_energy: float  # 偏置能量
-        self.bias_forces: np.ndarray  # 偏置力 (n_atoms, 3)
+        # Parameters updated during MD
+        self.positions: np.ndarray  # current positions (n_atoms, 3)
+        self.bond_lengths: np.ndarray  # current bond lengths (n_bonds,)
+        self.bond_vectors: np.ndarray  # bond vectors (n_bonds, 3)
+        self.epsilons: np.ndarray  # bond strains (n_bonds,)
+        self.grad_epsilons_per_bond: np.ndarray  # strain gradients (n_bonds, 3)
+        self.delta_potentials: np.ndarray  # per-bond bias potentials (n_bonds,)
+        self.Vb: float  # total bias potential base
+        self.grad_delta_potentials: np.ndarray  # bias potential gradients (n_bonds,)
+        self.epsilon_m_index: int  # maximum strain bond index
+        self.epsilon_m: float = 0.0  # maximum strain
+        self.grad_epsilon_m: np.ndarray  # maximum strain gradient (3,)
+        self.A: float  # envelope function value
+        self.grad_A: float  # envelope function gradient
+        self.bias_energy: float  # bias energy
+        self.bias_forces: np.ndarray  # bias forces (n_atoms, 3)
 
     def _calc_pbc_bond_vectors(self, positions: np.ndarray) -> np.ndarray:
         """
-        计算考虑周期性边界条件的键向量
+        Compute bond vectors accounting for periodic boundary conditions
         
-        使用最小镜像约定计算键向量，确保得到最短的键距离。
+        Uses the minimum image convention to compute bond vectors, ensuring
+        the shortest bond distance is obtained.
         
         Parameters
         ----------
         positions : np.ndarray, shape (n_atoms, 3)
-            原子位置
+            Atomic positions
         
         Returns
         -------
         bond_vectors : np.ndarray, shape (n_bonds, 3)
-            键向量
+            Bond vectors
         """
         p1 = positions[self.bond_indices[:, 0]]
         p2 = positions[self.bond_indices[:, 1]]
@@ -325,11 +352,11 @@ class BondBoostCalculator(BaseCalculator):
         if np.abs(np.linalg.det(cell)) < 1e-10:
             return diff
 
-        # 转换为分数坐标
+        # Convert to fractional coordinates
         cell_inv = np.linalg.inv(cell)
         scaled_diff = diff @ cell_inv
 
-        # 应用最小镜像约定
+        # Apply minimum image convention
         for i in range(3):
             if pbc[i]:
                 scaled_diff[:, i] = scaled_diff[:, i] - np.round(
@@ -340,19 +367,19 @@ class BondBoostCalculator(BaseCalculator):
 
     def _calc_delta_potentials(self, epsilons: np.ndarray) -> np.ndarray:
         """
-        计算单键偏置势
+        Compute per-bond bias potentials
         
         δV_i = (emax/Nb) * (1 - (ε_i/q)^2) if |ε_i| < q, else 0
         
         Parameters
         ----------
         epsilons : np.ndarray, shape (n_bonds,)
-            键应变
+            Bond strains
         
         Returns
         -------
         delta_potentials : np.ndarray, shape (n_bonds,)
-            单键偏置势
+            Per-bond bias potentials
         """
         emax = self.emax
         q = self._q
@@ -363,19 +390,19 @@ class BondBoostCalculator(BaseCalculator):
 
     def _calc_grad_delta_potential(self, epsilons: np.ndarray) -> np.ndarray:
         """
-        计算单键偏置势关于应变的梯度
+        Compute the gradient of per-bond bias potentials w.r.t. strain
         
         ∂(δV_i)/∂ε_i = -2*emax*ε_i / (Nb*q^2) if |ε_i| < q, else 0
         
         Parameters
         ----------
         epsilons : np.ndarray, shape (n_bonds,)
-            键应变
+            Bond strains
         
         Returns
         -------
         gradients : np.ndarray, shape (n_bonds,)
-            偏置势梯度
+            Bias potential gradients
         """
         emax = self.emax
         q = self._q
@@ -386,21 +413,22 @@ class BondBoostCalculator(BaseCalculator):
 
     def _calc_envelope(self, epsilon_m: float) -> float:
         """
-        计算包络函数
+        Compute the envelope function
         
         A(ε_m) = (1-(ε_m/q)^2)^2 / (1-P1^2(ε_m/q)^2) if |ε_m| < q, else 0
         
-        包络函数确保在接近过渡态（ε_m接近q）时偏置势平滑降为0。
+        The envelope function ensures the bias potential smoothly decays to
+        zero as the system approaches the transition state (ε_m near q).
         
         Parameters
         ----------
         epsilon_m : float
-            最大应变
+            Maximum strain
         
         Returns
         -------
         A : float
-            包络函数值
+            Envelope function value
         """
         q = self._q
         P1 = self._P1
@@ -413,19 +441,19 @@ class BondBoostCalculator(BaseCalculator):
 
     def _calc_grad_envelope(self, epsilon_m: float) -> float:
         """
-        计算包络函数关于最大应变的梯度
+        Compute the gradient of the envelope function w.r.t. maximum strain
         
         ∂A/∂ε_m
         
         Parameters
         ----------
         epsilon_m : float
-            最大应变
+            Maximum strain
         
         Returns
         -------
         dA : float
-            包络函数梯度
+            Envelope function gradient
         """
         q = self._q
         P1 = self._P1
@@ -446,7 +474,7 @@ class BondBoostCalculator(BaseCalculator):
         self.positions0 = self.bm.known_minima_positions[sid].reshape(-1, 3)
         self.write_basins.write(self.bm.export_basin(sid))
 
-        # build bond topology from the *relaxed* basin positions
+        # Build bond topology from the *relaxed* basin positions
         n_atoms = len(self.positions0)
         atoms_ref = self.atoms.copy()
         atoms_ref.set_positions(self.positions0)
@@ -471,30 +499,30 @@ class BondBoostCalculator(BaseCalculator):
         self.bond_indices = np.array(list(bond_set), dtype=int)
         self.n_bonds = len(self.bond_indices)
 
-        # reference bond lengths (PBC-aware)
+        # Reference bond lengths (PBC-aware)
         bond_vectors0 = self._calc_pbc_bond_vectors(self.positions0)
         self.bond_lengths0 = np.linalg.norm(bond_vectors0, axis=1)
 
         self._log(f"# Basin {sid}: {self.n_bonds} bonds identified")
 
     def _update_positions(self):
-        """更新当前原子位置"""
+        """Update current atomic positions"""
         self.positions = self.atoms.get_positions()
 
     def _update_bond_lengths(self):
-        """更新当前键长"""
+        """Update current bond lengths"""
         self.bond_vectors = self._calc_pbc_bond_vectors(self.positions)
         self.bond_lengths = np.linalg.norm(self.bond_vectors, axis=1)
 
     def _update_epsilons(self):
-        """更新键应变 ε_i = (r_i - r_i^0) / r_i^0"""
+        """Update bond strains ε_i = (r_i - r_i^0) / r_i^0"""
         self.epsilons = (self.bond_lengths - self.bond_lengths0) / self.bond_lengths0
 
     def _update_grad_epsilons(self):
         """
-        更新应变梯度 ∂ε_i/∂r_α
+        Update strain gradients ∂ε_i/∂r_α
         
-        对于键i连接原子(a1, a2)：
+        For bond i connecting atoms (a1, a2):
         ∂ε_i/∂r_a1 = (r_a1 - r_a2) / (r_i^0 * r_i)
         ∂ε_i/∂r_a2 = -∂ε_i/∂r_a1
         """
@@ -504,19 +532,19 @@ class BondBoostCalculator(BaseCalculator):
         self.grad_epsilons_per_bond = diff * prefactor  # (n_bonds, 3)
 
     def _update_delta_potentials(self):
-        """更新单键偏置势和总偏置势基数"""
+        """Update per-bond bias potentials and total bias potential base"""
         self.delta_potentials = self._calc_delta_potentials(self.epsilons)
         self.Vb = self.delta_potentials.sum()
 
     def _update_grad_delta_potentials(self):
-        """更新单键偏置势梯度"""
+        """Update per-bond bias potential gradients"""
         self.grad_delta_potentials = self._calc_grad_delta_potential(
             self.epsilons
         )
 
     def _update_epsilon_m(self):
         """
-        更新最大应变及其梯度
+        Update maximum strain and its gradient
         
         ε_m = max_i |ε_i|
         ∂ε_m/∂r_α = sign(ε_m) * ∂ε_m/∂r_α
@@ -532,19 +560,19 @@ class BondBoostCalculator(BaseCalculator):
         self.grad_epsilon_m = sign * grad_vec
 
     def _update_envelope(self):
-        """更新包络函数值"""
+        """Update envelope function value"""
         self.A = self._calc_envelope(self.epsilon_m)
 
     def _update_grad_envelope(self):
-        """更新包络函数梯度"""
+        """Update envelope function gradient"""
         self.grad_A = self._calc_grad_envelope(self.epsilon_m)
 
     def _update_bias(self):
         """
-        更新偏置势能和偏置力
+        Update bias potential and bias forces
         
-        偏置能量：E_bias = A(ε_m) * V_b
-        偏置力：F_bias = -∇E_bias (通过链式法则计算)
+        Bias energy: E_bias = A(ε_m) * V_b
+        Bias forces: F_bias = -∇E_bias (computed via the chain rule)
         """
         self._update_positions()
         self._update_bond_lengths()
@@ -556,10 +584,10 @@ class BondBoostCalculator(BaseCalculator):
         self._update_envelope()
         self._update_grad_envelope()
 
-        # 偏置能量
+        # Bias energy
         self.bias_energy = self.A * self.Vb
 
-        # 偏置力计算：F_bias = -A * Σ_i (∂δV_i/∂ε_i) * (∂ε_i/∂r)
+        # Bias force calculation: F_bias = -A * Σ_i (∂δV_i/∂ε_i) * (∂ε_i/∂r)
         #                      - V_b * (∂A/∂ε_m) * (∂ε_m/∂r)
         coeffs = self.A * self.grad_delta_potentials  # (n_bonds,)
 
@@ -608,10 +636,10 @@ class BondBoostCalculator(BaseCalculator):
 
         self.n_atoms = self.atoms.get_global_number_of_atoms()
 
-        # unbiased energy & forces
+        # Unbiased energy & forces
         self._update_std_results()
 
-        # ── check if the basin reference needs updating ──
+        # ── Check if the basin reference needs updating ──
         need_update = self.positions0 is None
         if self.epsilon_m > self._max_q * self._q:
             need_update = True
@@ -637,7 +665,7 @@ class BondBoostCalculator(BaseCalculator):
                         "BondBoost: Unable to identify stable state"
                     )
 
-        # ── compute bias ──
+        # ── Compute bias ──
         self._update_bias()
 
         bias_energy = self.bias_energy
@@ -652,7 +680,7 @@ class BondBoostCalculator(BaseCalculator):
         self.bm.fcalls = 0
         self.parameters["fcalls"] = self.fcalls
 
-        # ── write bias.log ──
+        # ── Write bias.log ──
         if self.bias_log.tell() == 0:
             self.bias_log.write("# bias_energy    temperature    ACT\n")
 

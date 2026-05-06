@@ -113,7 +113,7 @@ python verify.py
 .
 ├── HDkit/                          # ← 轻量级 HD 工具包（无需安装）
 │   ├── __init__.py                 #   包初始化
-│   ├── basin.py                    #   BasinManager：势能面低谷识别与持久化
+│   ├── basin.py                    #   BasinManager：势能面势阱识别与持久化
 │   └── calculators/
 │       ├── __init__.py             #   计算器注册
 │       ├── basecalculator.py       #   BaseCalculator：抽象基类
@@ -121,7 +121,7 @@ python verify.py
 │       ├── bondboost.py            #   BondBoostCalculator：Bond-Boost HD 方法
 │       └── ridge/
 │           ├── __init__.py
-│           └── mmf.py              #   MMFPathCalculator：MMF 脊线 HD 方法
+│           └── mmf.py              #   MMFPathCalculator：MMF 势脊 HD 方法
 │
 ├── run_hd.py                       # ← 多步 HD-MD 运行器 (bb | mmf | j-mmf)
 ├── run_compare.py                  # ← 单步偏置对比
@@ -141,11 +141,11 @@ python verify.py
 
 | 模块 | 类 | 用途 |
 |---|---|---|
-| `basin.py` | `BasinManager` | 通过结构优化识别和缓存低谷（局部极小值）；通过 Hessian 特征值分析检测鞍点 |
+| `basin.py` | `BasinManager` | 通过结构优化识别和缓存势阱（局部极小值）；通过 Hessian 特征值分析检测鞍点 |
 | `calculators/basecalculator.py` | `BaseCalculator` | 抽象基类，提供 `std_calc`（无偏势能面）接口和日志 |
 | `calculators/minmode.py` | `MinModeCalculator` | 通过 Lanczos 迭代或完全对角化计算 Hessian 最小特征向量；MMF 用于确定爬升方向 |
 | `calculators/bondboost.py` | `BondBoostCalculator` | Bond-Boost 方法：监测键应变，施加抛物线型偏置，在过渡态附近包络函数归零 |
-| `calculators/ridge/mmf.py` | `MMFPathCalculator` | MMF 方法：沿最小模式方向爬升定位能量脊线，在鞍点区域施加偏置。支持 Simple 和 Shear Jacobian 算法 |
+| `calculators/ridge/mmf.py` | `MMFPathCalculator` | MMF 方法：沿最小模式方向爬升定位能量势脊，在鞍点区域施加偏置。支持 Simple 和 Shear Jacobian 算法 |
 
 ---
 
@@ -173,7 +173,7 @@ python run_compare.py
 | `climb-mmf.traj` | MMF Simple — 完整爬升路径轨迹 |
 | `climb-j-mmf.traj` | J-MMF Shear — 完整爬升路径轨迹 |
 
-MMF 方法使用 `emax = −1`（无能量上限），爬升可到达脊线。
+MMF 方法使用 `emax = −1`（无能量上限），爬升可到达势脊。
 `hyper-` 轨迹存储完整的有偏能量和力；`bias-` 轨迹仅存储偏置贡献，
 适合使用标准能量/力数组的可视化工具。
 
@@ -181,10 +181,10 @@ MMF 方法使用 `emax = −1`（无能量上限），爬升可到达脊线。
 
 | 日志 | 内容 |
 |---|---|
-| `rlx.log` | BasinManager — 低谷识别中的每步优化 |
-| `climb.log` | MMF — 每次爬升步骤（能量、低谷 ID、耗时） |
+| `rlx.log` | BasinManager — 势阱识别中的每步优化 |
+| `climb.log` | MMF — 每次爬升步骤（能量、势阱 ID、耗时） |
 | `mode.log` | MinModeCalculator — Lanczos 迭代和收敛角度 |
-| `Bond.log` | BondBoost — 低谷更新通知 |
+| `Bond.log` | BondBoost — 势阱更新通知 |
 
 相比之下，`run_hd.py` 运行时会**关闭详细输出**，避免长时间 MD 产生海量日志。
 
@@ -218,7 +218,7 @@ python run_hd.py j-mmf     # J-MMF Shear  (J_algo="h", 推荐)
 | 参数 | 方法 | emax | 生产时长 | loginterval | 特点 |
 |---|---|---|---|---|---|
 | `bb` | Bond-Boost | 0.3 eV | 10 ns | 10000 | ~1 次力计算/步，非常高效 |
-| `mmf` | MMF Simple | 0.5 eV | 100 ps | 100 | 直接使用脊线力（基线方法） |
+| `mmf` | MMF Simple | 0.5 eV | 100 ps | 100 | 直接使用势脊力（基线方法） |
 | `j-mmf` | J-MMF Shear | 0.5 eV | 100 ps | 100 | Jacobian 传播 + 正交投影 |
 
 所有运行使用 500 K、1 fs 时间步长、Nose–Hoover chain NVT 热浴、
@@ -237,7 +237,7 @@ python run_hd.py j-mmf     # J-MMF Shear  (J_algo="h", 推荐)
 3. 初始化 Maxwell–Boltzmann 速度
 4. 平衡阶段：500 K 下 NVT 10 ps（使用无偏 std_calc）
 5. 生产阶段：NVT HD-MD —— 10 ns（BB）或 100 ps（MMF / J-MMF）
-6. 后处理：提取低谷跃迁 → 计算 ACT
+6. 后处理：提取势阱跃迁 → 计算 ACT
 7. 转换 `hd.traj` → `bias_hd.traj`（仅偏置轨迹，用于可视化）
 
 ---
@@ -251,15 +251,15 @@ python run_hd.py j-mmf     # J-MMF Shear  (J_algo="h", 推荐)
 | 文件 | 说明 |
 |---|---|
 | `bias.log` | 每步偏置能量、温度和 ACT（加速因子） |
-| `basins.traj` | ASE 轨迹文件，记录识别的低谷（稳态）结构 |
-| `basins.log` | 低谷跃迁汇总（帧号、距离、移动原子数） |
+| `basins.traj` | ASE 轨迹文件，记录识别的势阱（稳态）结构 |
+| `basins.log` | 势阱跃迁汇总（帧号、距离、移动原子数） |
 | `hd.traj` | 完整 MD 轨迹 |
 | `bias_hd.traj` | 仅偏置轨迹（每帧的偏置能量和力） |
 | `HD.log` | ASE MD 日志（能量、温度等） |
 | `fin.traj` | 最终原子构型 |
 | `ini-T.traj` | 平衡后的结构 |
 | `basin.pkl` | Pickle 格式的 BasinManager 数据库（用于重启） |
-| `rlx.log` | BasinManager — 每次低谷识别的最终结果行 |
+| `rlx.log` | BasinManager — 每次势阱识别的最终结果行 |
 | `Bond.log` | BB 内部日志（仅 Bond-Boost） |
 | `climb.log` | MMF 爬升日志（仅 MMF/J-MMF，仅输出最终结果） |
 | `mode.log` | Lanczos 头行（仅 MMF/J-MMF） |
@@ -274,10 +274,10 @@ python run_hd.py j-mmf     # J-MMF Shear  (J_algo="h", 推荐)
 | `bias-bb.traj` / `bias-mmf.traj` / `bias-j-mmf.traj` | 仅偏置能量和力 |
 | `climb-mmf.traj` / `climb-j-mmf.traj` | 完整爬升路径轨迹（仅 MMF） |
 | `compare-ini.traj` | 含 std_calc 能量和力的初始结构 |
-| `rlx.log` | BasinManager — 每次低谷识别的每一步优化 |
-| `climb.log` | MMF — 每次爬升步骤（步号、能量、低谷 ID、时间） |
+| `rlx.log` | BasinManager — 每次势阱识别的每一步优化 |
+| `climb.log` | MMF — 每次爬升步骤（步号、能量、势阱 ID、时间） |
 | `mode.log` | MinModeCalculator — Lanczos 迭代细节和收敛情况 |
-| `Bond.log` | BondBoost — 低谷更新通知 |
+| `Bond.log` | BondBoost — 势阱更新通知 |
 
 ### 关键指标
 

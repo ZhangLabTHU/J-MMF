@@ -7,29 +7,33 @@ __author__ = "Qian Lixiang"
 __email__ = "649811459@qq.com"
 
 """
-势能面稳态(Basin)管理模块
+Basin (energy well) management module
 
-本模块提供 BasinManager 类，用于高效识别、存储和管理分子动力学模拟中的势能面稳态。
-主要功能包括：
-- 通过结构优化将原子构型映射到对应的稳态（basin）
-- 智能缓存已知稳态，快速识别重复访问的结构
-- 考虑周期性边界条件的距离计算
-- 自动判断鞍点（saddle point）并拒绝注册
-- 持久化存储/加载稳态数据库
+This module provides the BasinManager class for efficient identification,
+storage, and management of basins on the potential energy surface (PES) in
+molecular dynamics simulations. Key features include:
 
-典型用法:
+- Mapping atomic configurations to their corresponding basins via
+  structure optimization
+- Intelligent caching of known basins for fast recognition of revisited
+  structures
+- Distance calculations respecting periodic boundary conditions (PBC)
+- Automatic detection and rejection of saddle points
+- Persistent storage/loading of basin databases
+
+Typical usage:
     >>> from ase import Atoms
     >>> from ase.calculators.emt import EMT
     >>> 
-    >>> # 创建管理器
+    >>> # Create manager
     >>> bm = BasinManager(min_dist_threshold=1.0, fmax=0.01)
     >>>
-    >>> # 识别结构对应的稳态ID
+    >>> # Map a structure to its basin ID
     >>> atoms = Atoms('Cu4', ...)
     >>> atoms.calc = EMT()
     >>> basin_id = bm.map_atoms_to_basin(atoms)
     >>>
-    >>> # 导出已知稳态
+    >>> # Export a known basin
     >>> if basin_id is not None:
     >>>     basin_atoms = bm.export_basin(basin_id)
 """
@@ -45,17 +49,17 @@ from .calculators.minmode import MinModeCalculator
 
 def wrap_atoms(atoms) -> Atoms:
     """
-    对原子位置(positions)进行周期性边界条件(PBC)包裹。
+    Wrap atomic positions according to periodic boundary conditions (PBC).
 
     Parameters
     ----------
     atoms : Atoms
-        需要包裹的原子对象。
+        The atoms object to be wrapped.
 
     Returns
     -------
     Atoms
-        包裹后的原子对象。
+        The wrapped atoms object.
     """
     pbc = atoms.get_pbc()
     if not any(pbc):
@@ -65,16 +69,16 @@ def wrap_atoms(atoms) -> Atoms:
         return atoms
     pos = atoms.get_positions()
 
-    # 转换为分数坐标
+    # Convert to fractional coordinates
     cell_inv = np.linalg.inv(cell)
     scaled = pos @ cell_inv
 
-    # 对有周期性的方向进行包裹
+    # Wrap periodic directions
     for i in range(3):
         if pbc[i]:
             scaled[:, i] = scaled[:, i] % 1.0
 
-    # 转换回笛卡尔坐标
+    # Convert back to Cartesian coordinates
     pos_wrapped = scaled @ cell
 
     atoms.set_positions(pos_wrapped)
@@ -83,12 +87,13 @@ def wrap_atoms(atoms) -> Atoms:
 
 class BasinFoundException(Exception):
     """
-    用于在优化过程中捕获稳态命中的异常信号。
-    
-    当优化器在迭代过程中发现原子结构进入已知稳态的吸引域时抛出。
-    
+    Exception used to signal that a basin has been hit during optimization.
+
+    Raised when the optimizer discovers during iteration that the atomic
+    structure has entered the attraction basin of a known stable state.
+
     Attributes:
-        basin_id: 命中的稳态ID
+        basin_id: The ID of the basin that was hit.
     """
     def __init__(self, basin_id: int):
         self.basin_id = basin_id
@@ -97,115 +102,133 @@ class BasinFoundException(Exception):
 
 class BasinManager:
     """
-    势能面稳态(Basin)管理器
-    
-    本类通过结构优化将原子构型映射到势能面的局部最小值（稳态），并维护已知稳态的数据库。
-    利用智能缓存和周期性边界条件优化，实现高效的稳态识别。
-    
-    工作流程：
-    1. 输入原子结构（必须已设置计算器）
-    2. 检查是否接近已知稳态（通过距离阈值判断）
-    3. 如果不接近，进行结构优化
-    4. 优化过程中持续检查是否进入已知稳态吸引域
-    5. 如果优化收敛到新位置，计算Hessian最小特征值判断是否为稳态
-    6. 如果特征值>0，注册为新稳态；如果<0，判定为鞍点并拒绝注册
-    
+    Energy basin (energy well) manager
+
+    This class maps atomic configurations to local minima (basins) on the
+    PES via structure optimization and maintains a database of known basins.
+    Smart caching and PBC-aware distance calculations enable efficient
+    basin identification.
+
+    Workflow:
+    1. Accept an input structure (must have a calculator attached)
+    2. Check whether it is close to a known basin (distance threshold)
+    3. If not close, run structure optimization
+    4. During optimization, continuously check whether the structure enters
+       the attraction basin of a known stable state
+    5. If optimization converges to a new position, compute the smallest
+       Hessian eigenvalue to determine whether it is a basin or saddle point
+    6. If eigenvalue > 0, register as a new basin; if < 0, classify as a
+       saddle point and refuse registration
+
     Parameters
     ----------
     min_dist_threshold : float, default=1.0
-        判定两个结构是否属于同一稳态的距离阈值（单位：Å）。
-        当两个结构的原子位置差异（L2范数）小于此值时，认为它们属于同一稳态。
-        建议根据系统大小和灵敏度需求调整：
-        - 较小系统（<100原子）：0.5-1.0 Å
-        - 较大系统（>100原子）：1.0-2.0 Å
-    
+        Distance threshold (in Å) for deciding whether two structures
+        belong to the same basin. When the L2 norm of the atomic position
+        difference between two structures is smaller than this value,
+        they are considered to belong to the same basin.
+        Recommended values depending on system size and sensitivity needs:
+        - Small systems (< 100 atoms): 0.5–1.0 Å
+        - Large systems (> 100 atoms): 1.0–2.0 Å
+
     logfile : str, default='rlx.log'
-        优化过程日志文件路径。记录每次map_atoms_to_basin调用的详细信息：
-        - Step: 优化步数
-        - Min-D: 到最近稳态的距离
-        - Reason: 终止原因（FAST=快速命中，SADDLE=鞍点，空=正常收敛）
-        - Basin: 命中的稳态ID（-1表示鞍点）
-        - Energy: 当前势能
-        - fmax: 当前最大力
-        - EigVal: Hessian最小特征值（仅新稳态时计算）
-    
+        Path to the optimization log file. Records detailed information
+        for each call to map_atoms_to_basin:
+        - Step: optimization step count
+        - Min-D: distance to the nearest basin
+        - Reason: termination reason (FAST = fast hit, SADDLE = saddle
+          point, empty = normal convergence)
+        - Basin: ID of the hit basin (–1 indicates a saddle point)
+        - Energy: current potential energy
+        - fmax: current maximum force component
+        - EigVal: smallest Hessian eigenvalue (computed only for new basins)
+
     fmax : float, default=1e-2
-        结构优化的力收敛标准（单位：eV/Å）。
-        当所有原子的最大力分量小于此值时，认为优化收敛。
-    
+        Force convergence criterion for structure optimization (in eV/Å).
+        Optimization is considered converged when the maximum force
+        component on any atom falls below this value.
+
     optimizer_class : Type[Optimizer], optional
-        使用的ASE优化器类。默认使用BFGSLineSearch。
-        可选：FIRE, LBFGS, GPMin等ASE支持的优化器。
-    
+        The ASE optimizer class to use. Defaults to FIRE2.
+        Other options: BFGSLineSearch, LBFGS, GPMin, etc.
+
     storage_file : str, default='basin.pkl'
-        持久化存储文件路径。保存/加载已知稳态数据库，包括：
-        - 稳态位置（考虑周期性边界条件）
-        - 稳态能量和力
-        - 原子系统信息（符号、晶胞、周期性边界条件）
-        如果文件存在，初始化时会自动加载。
-    
+        Path to the persistent storage file. Saves/loads the known-basin
+        database, including:
+        - Basin positions (PBC-wrapped)
+        - Basin energies and forces
+        - System topology (symbols, cell, PBC)
+        If the file exists, it is loaded automatically at initialization.
+
     verbose : bool, default=False
-        是否输出详细日志。
-        - True: 每个优化步骤都输出到logfile
-        - False: 仅输出最终结果
-    
+        Whether to output detailed logs.
+        - True: log every optimization step to the log file
+        - False: log only the final result
+
     Attributes
     ----------
     n_basins : int
-        当前已注册的稳态数量
-    
+        Number of basins currently registered
+
     known_minima_positions : List[np.ndarray]
-        已知稳态的原子位置列表，每个元素形状为 (N_atoms*3,)
-    
+        List of atomic positions for each known basin;
+        each element has shape (N_atoms*3,)
+
     known_minima_energies : List[float]
-        已知稳态的能量列表
-    
+        List of energies for each known basin
+
     known_minima_forces : List[np.ndarray]
-        已知稳态的力列表，每个元素形状为 (N_atoms, 3)
-    
+        List of force arrays for each known basin;
+        each element has shape (N_atoms, 3)
+
     atoms : Atoms
-        参考原子对象，保存系统的拓扑信息（符号、晶胞、PBC）
-    
+        Reference atoms object that preserves the system's topology
+        (symbols, cell, PBC)
+
     Examples
     --------
-    基本用法：
-    
+    Basic usage:
+
     >>> from ase.build import bulk
     >>> from ase.calculators.emt import EMT
     >>> 
-    >>> # 创建管理器
+    >>> # Create manager
     >>> bm = BasinManager(min_dist_threshold=0.8, fmax=0.01, verbose=True)
     >>>
-    >>> # 创建原子结构并设置计算器
+    >>> # Create structure and attach calculator
     >>> atoms = bulk('Cu', 'fcc', a=3.6).repeat((2, 2, 2))
-    >>> atoms.rattle(stdev=0.1)  # 随机扰动
+    >>> atoms.rattle(stdev=0.1)  # random perturbation
     >>> atoms.calc = EMT()
     >>>
-    >>> # 识别稳态
+    >>> # Identify basin
     >>> basin_id = bm.map_atoms_to_basin(atoms)
     >>> print(f"Structure mapped to basin {basin_id}")
     >>>
-    >>> # 导出稳态结构
+    >>> # Export basin structure
     >>> if basin_id is not None:
     >>>     basin_atoms = bm.export_basin(basin_id)
     >>>     print(f"Basin energy: {basin_atoms.get_potential_energy():.4f} eV")
     >>>
-    >>> # 保存数据库以供后续使用
+    >>> # Save database for later use
     >>> bm.save_to_file("my_basins.pkl")
-    
-    从已有数据库加载：
-    
-    >>> # 下次运行时自动加载
+
+    Loading from a saved database:
+
+    >>> # Auto-load on next run
     >>> bm = BasinManager(storage_file="my_basins.pkl")
     >>> print(f"Loaded {bm.n_basins} known basins")
-    
+
     Notes
     -----
-    - 本类自动处理周期性边界条件（PBC），使用最小镜像约定计算距离
-    - 优化器实例会被复用以提高效率，避免重复初始化开销
-    - 对于大规模系统，建议适当增大min_dist_threshold和fmax以加快计算
-    - 鞍点判断依赖于Hessian最小特征值计算，这是一个相对昂贵的操作，
-      仅在优化收敛到新位置时执行
+    - This class automatically handles PBC using the minimum-image convention
+      for distance calculations.
+    - The optimizer instance is reused for efficiency to avoid repeated
+      initialization overhead.
+    - For large systems, consider increasing min_dist_threshold and fmax
+      to speed up computation.
+    - Saddle-point detection relies on Hessian smallest-eigenvalue
+      calculation, which is relatively expensive and is performed only when
+      optimization converges to a new position.
     """
 
     def __init__(
@@ -218,7 +241,7 @@ class BasinManager:
         verbose: bool = False,
     ):
 
-        # ===== 配置参数 =====
+        # ===== Configuration parameters =====
         self._min_dist_threshold = min_dist_threshold
         self._logfile = logfile
         self._fmax = fmax
@@ -235,24 +258,24 @@ class BasinManager:
         else:
             self._optimizer_class = optimizer_class
 
-        # ===== 内部工具 =====
-        self._mm_calc: MinModeCalculator = None  # 用于计算Hessian最小特征值
-        self._opt_atoms: Optional[Atoms] = None  # 优化器绑定的atoms对象
-        self._optimizer: Optional[Optimizer] = None  # 复用的优化器实例
-        self.fcalls: int = 0  # 力计算次数统计
+        # ===== Internal utilities =====
+        self._mm_calc: MinModeCalculator = None  # For computing smallest Hessian eigenvalue
+        self._opt_atoms: Optional[Atoms] = None  # Atoms object bound to the optimizer
+        self._optimizer: Optional[Optimizer] = None  # Reusable optimizer instance
+        self.fcalls: int = 0  # Force-call counter
 
-        # ===== 稳态数据库 =====
-        self.atoms: Optional[Atoms] = None  # 参考原子对象（不含calc）
-        self.known_minima_positions: List[np.ndarray] = []  # 稳态位置列表
-        self.known_minima_energies: List[float] = []  # 稳态能量列表
-        self.known_minima_forces: List[np.ndarray] = []  # 稳态力列表
-        self.n_basins = 0  # 已注册稳态数量
+        # ===== Basin database =====
+        self.atoms: Optional[Atoms] = None  # Reference atoms object (no calc)
+        self.known_minima_positions: List[np.ndarray] = []  # Basin position list
+        self.known_minima_energies: List[float] = []  # Basin energy list
+        self.known_minima_forces: List[np.ndarray] = []  # Basin force list
+        self.n_basins = 0  # Number of registered basins
 
-        # ===== 性能优化缓存 =====
-        self._dirty_centers = True  # 缓存失效标记
-        self._cached_centers_array: Optional[np.ndarray] = None  # 稳态位置缓存(Nb, 3N)
+        # ===== Performance optimization cache =====
+        self._dirty_centers = True  # Cache invalidation flag
+        self._cached_centers_array: Optional[np.ndarray] = None  # Cached basin positions (Nb, 3N)
 
-        # ===== 从文件加载已有数据（如果存在）=====
+        # ===== Load existing data from file (if present) =====
         if os.path.exists(self._storage_file):
             try:
                 self.load_from_file(self._storage_file)
@@ -263,34 +286,37 @@ class BasinManager:
 
     def save_to_file(self, filename: str = None):
         """
-        保存稳态数据库到pickle文件
-        
-        将当前管理器的所有稳态信息持久化到磁盘，包括：
-        - 所有已知稳态的位置、能量、力
-        - 稳态数量和距离阈值
-        - 参考原子对象的拓扑信息（符号、晶胞、PBC）
-        
+        Save the basin database to a pickle file.
+
+        Persists all basin information of the current manager to disk,
+        including:
+        - Positions, energies, and forces of all known basins
+        - Number of basins and distance threshold
+        - Topology of the reference atoms object (symbols, cell, PBC)
+
         Parameters
         ----------
         filename : str, optional
-            保存文件路径。如果为None，使用初始化时指定的storage_file（默认'basin.pkl'）
-        
+            Path to the save file. If None, uses the storage_file
+            specified at initialization (default 'basin.pkl').
+
         Examples
         --------
         >>> bm = BasinManager()
-        >>> # ... 进行一些稳态识别 ...
-        >>> bm.save_to_file("my_basins.pkl")  # 保存到指定文件
-        >>> bm.save_to_file()  # 保存到默认文件
-        
+        >>> # ... perform some basin identification ...
+        >>> bm.save_to_file("my_basins.pkl")  # save to a specific file
+        >>> bm.save_to_file()  # save to the default file
+
         Notes
         -----
-        - 文件格式为Python pickle，不可跨Python版本移植
-        - 保存的位置已考虑周期性边界条件进行包裹
-        - 如果文件已存在，会被覆盖
+        - The file format is Python pickle; not portable across Python
+          versions.
+        - Saved positions are already PBC-wrapped.
+        - Existing files will be overwritten.
         """
         target_file = filename if filename else self._storage_file
         
-        # 构建数据字典
+        # Build data dictionary
         data = {
             "positions": self.known_minima_positions,
             "energies": self.known_minima_energies,
@@ -299,7 +325,7 @@ class BasinManager:
             "threshold": self._min_dist_threshold,
         }
         
-        # 保存原子系统拓扑信息
+        # Save atom system topology
         if self.atoms is not None:
             atoms_info = {
                 "symbols": self.atoms.get_chemical_symbols(),
@@ -317,32 +343,36 @@ class BasinManager:
 
     def load_from_file(self, filename: str = None):
         """
-        从pickle文件加载稳态数据库
-        
-        恢复之前保存的稳态数据库，包括所有稳态信息和参考原子对象。
-        加载后会自动对所有位置进行周期性包裹，确保数据一致性。
-        
+        Load the basin database from a pickle file.
+
+        Restores a previously saved basin database, including all basin
+        information and the reference atoms object. After loading,
+        all positions are PBC-wrapped to ensure data consistency.
+
         Parameters
         ----------
         filename : str, optional
-            加载文件路径。如果为None，使用初始化时指定的storage_file（默认'basin.pkl'）
-        
+            Path to the load file. If None, uses the storage_file
+            specified at initialization (default 'basin.pkl').
+
         Raises
         ------
         FileNotFoundError
-            如果指定文件不存在
-        
+            If the specified file does not exist.
+
         Examples
         --------
         >>> bm = BasinManager()
         >>> bm.load_from_file("my_basins.pkl")
         >>> print(f"Loaded {bm.n_basins} basins")
-        
+
         Notes
         -----
-        - 加载会覆盖当前管理器的所有数据
-        - 如果文件中包含atoms_info，会重建参考原子对象
-        - 加载后缓存会被标记为失效，下次使用时自动重建
+        - Loading overwrites all data in the current manager.
+        - If the file contains atoms_info, the reference atoms object
+          is reconstructed.
+        - The cache is marked as invalid after loading and will be
+          rebuilt automatically at next use.
         """
         target_file = filename if filename else self._storage_file
         
@@ -352,17 +382,17 @@ class BasinManager:
         with open(target_file, 'rb') as f:
             data = pickle.load(f)
         
-        # 恢复稳态数据
+        # Restore basin data
         self.known_minima_positions = data.get("positions", [])
         self.known_minima_energies = data.get("energies", [])
         self.known_minima_forces = data.get("forces", [])
         self.n_basins = data.get("n_basins", 0)
         
-        # 恢复距离阈值
+        # Restore distance threshold
         if "threshold" in data:
             self._min_dist_threshold = data["threshold"]
         
-        # 重建参考原子对象
+        # Reconstruct reference atoms object
         if "atoms_info" in data:
             atoms_info = data["atoms_info"]
             symbols = atoms_info.get("symbols", [])
@@ -370,7 +400,7 @@ class BasinManager:
             pbc = atoms_info.get("pbc", None)
             
             if symbols:
-                # 使用第一个稳态的位置初始化（如果有）
+                # Initialize with the first basin's positions (if available)
                 if self.known_minima_positions:
                     positions = self.known_minima_positions[0].reshape(-1, 3)
                 else:
@@ -382,60 +412,67 @@ class BasinManager:
                 if pbc is not None:
                     self.atoms.set_pbc(pbc)
                 
-                # 对所有已存储的位置进行周期性包裹（兼容旧数据）
+                # PBC-wrap all stored positions (for backward compatibility with old data)
                 self._wrap_stored_positions()
         
-        # 标记缓存失效
+        # Mark cache as invalid
         self._dirty_centers = True
 
     def map_atoms_to_basin(self, atoms: Atoms) -> Optional[int]:
         """
-        将原子结构映射到对应的稳态(Basin)
-        
-        这是BasinManager的核心方法。给定一个原子结构，通过结构优化和距离比较，
-        判断它属于哪个已知稳态，或者注册为新的稳态。
-        
-        算法流程：
-        1. 检查输入结构是否接近已知稳态（快速命中）
-        2. 如果不接近，启动结构优化
-        3. 优化过程中持续检查是否进入已知稳态吸引域
-        4. 如果优化收敛到新位置，计算Hessian最小特征值
-        5. 特征值>0 → 注册新稳态；特征值<0 → 判定为鞍点，返回None
-        
+        Map an atomic structure to its corresponding basin (energy well).
+
+        This is the core method of BasinManager. Given an atomic structure,
+        it determines which known basin it belongs to via structure
+        optimization and distance comparison, or registers it as a new basin.
+
+        Algorithm flow:
+        1. Check whether the input structure is close to a known basin
+           (fast hit)
+        2. If not close, start structure optimization
+        3. During optimization, continuously check whether the structure
+           enters the attraction basin of a known stable state
+        4. If optimization converges to a new position, compute the
+           smallest Hessian eigenvalue
+        5. Eigenvalue > 0 → register as a new basin;
+           eigenvalue < 0 → classify as a saddle point, return None
+
         Parameters
         ----------
         atoms : Atoms
-            待分类的原子结构，**必须已设置calculator**。
-            结构的位置、晶胞和PBC信息会被自动考虑。
-        
+            The atomic structure to classify. **Must have a calculator
+            attached.** Position, cell, and PBC information are
+            automatically taken into account.
+
         Returns
         -------
         basin_id : int or None
-            - int (>= 0): 成功映射到的稳态ID
-              - 如果是已知稳态，返回其ID
-              - 如果是新稳态，注册后返回新ID
-            - None: 优化收敛到鞍点（Hessian最小特征值<0）或优化未收敛
-        
+            - int (>= 0): ID of the successfully matched basin
+              - If a known basin, returns its ID
+              - If a new basin, registers it and returns the new ID
+            - None: optimization converged to a saddle point (smallest
+              Hessian eigenvalue < 0) or optimization did not converge
+
         Raises
         ------
         ValueError
-            如果输入的atoms未设置calculator
-        
+            If the input atoms has no calculator attached.
+
         Examples
         --------
-        基本用法：
-        
+        Basic usage:
+
         >>> from ase.build import bulk
         >>> from ase.calculators.emt import EMT
         >>> 
         >>> bm = BasinManager(fmax=0.01, min_dist_threshold=0.8)
         >>> 
-        >>> # 创建结构并设置计算器
+        >>> # Create structure and attach calculator
         >>> atoms = bulk('Cu', 'fcc', a=3.6)
         >>> atoms.rattle(stdev=0.1)
         >>> atoms.calc = EMT()
         >>>
-        >>> # 映射到稳态
+        >>> # Map to a basin
         >>> basin_id = bm.map_atoms_to_basin(atoms)
         >>> 
         >>> if basin_id is not None:
@@ -443,55 +480,57 @@ class BasinManager:
         >>>     basin_atoms = bm.export_basin(basin_id)
         >>> else:
         >>>     print("Structure is a saddle point")
-        
-        处理多个结构：
-        
+
+        Processing multiple structures:
+
         >>> basin_ids = []
         >>> for i, atoms in enumerate(structures):
         >>>     atoms.calc = EMT()
         >>>     bid = bm.map_atoms_to_basin(atoms)
         >>>     basin_ids.append(bid)
         >>>     print(f"Structure {i}: basin {bid}")
-        
+
         Notes
         -----
-        - 输入的atoms对象不会被修改，内部使用副本进行操作
-        - 优化器会被复用以提高效率
-        - 周期性边界条件（PBC）会被自动考虑
-        - 日志会写入初始化时指定的logfile
-        - 如果verbose=False，每次调用仅输出最终结果行；
-          如果verbose=True，输出所有优化步骤
-        - 判断鞍点需要计算Hessian最小特征值，这是一个相对昂贵的操作
+        - The input atoms object is not modified; operations are performed
+          on a copy.
+        - The optimizer is reused for efficiency.
+        - Periodic boundary conditions (PBC) are automatically accounted for.
+        - Logs are written to the log file specified at initialization.
+        - If verbose=False, each call outputs only the final result line;
+          if verbose=True, all optimization steps are logged.
+        - Saddle-point detection requires computing the smallest Hessian
+          eigenvalue, which is relatively expensive.
         """
-        # ===== 输入验证和准备 =====
+        # ===== Input validation and preparation =====
         calc = atoms.calc
         if calc is None:
             raise ValueError("Input atoms must have a calculator set.")
         
-        # 创建副本避免修改原始数据
+        # Create a copy to avoid modifying the original data
         atoms = atoms.copy()
         atoms.calc = calc
         
-        # 保存参考原子对象
+        # Save reference atoms object
         self.atoms = atoms.copy()
 
-        # ===== 步骤1: 准备缓存 =====
+        # ===== Step 1: Prepare cache =====
         self._ensure_centers_cache()
 
-        # 获取当前位置（考虑周期性包裹）
+        # Get current positions (PBC-wrapped)
         atoms = wrap_atoms(atoms)
         start_pos = self._get_flat_positions(atoms)
         
-        # ===== 步骤2: 快速命中检查 =====
+        # ===== Step 2: Fast-hit check =====
         if self.n_basins > 0:
             all_dists = self._calc_pbc_distances(start_pos, self._cached_centers_array)
             min_dist = np.min(all_dists)
             
             if min_dist < self._min_dist_threshold:
-                # 快速命中已知稳态
+                # Fast hit to a known basin
                 hit_id = int(np.argmin(all_dists))
                 
-                # 记录日志
+                # Write log
                 write_header = not os.path.exists(self._logfile) or os.stat(self._logfile).st_size == 0
                 with open(self._logfile, 'a') as f:
                     if write_header:
@@ -499,40 +538,40 @@ class BasinManager:
                     
                     energy = atoms.get_potential_energy()
                     forces = atoms.get_forces()
-                    self.fcalls += 1  # 统计力计算次数
+                    self.fcalls += 1  # Count force evaluation
                     fmax = np.sqrt((forces**2).sum(axis=1).max())
                     self._write_log_line(f, 0, min_dist, "FAST", hit_id, energy, fmax, " ")
                 
-                # 清理引用
+                # Clear references
                 self._clear_calc_atoms(calc)
                 atoms.calc = None
                 return hit_id
 
-        # ===== 步骤3: 结构优化 =====
+        # ===== Step 3: Structure optimization =====
         opt, opt_atoms = self._get_optimizer(atoms)
         step_counter = 0
         hit_basin_id = None
         converged = False
         max_steps = 10000
         
-        # 打开日志文件
+        # Open log file
         write_header = not os.path.exists(self._logfile) or os.stat(self._logfile).st_size == 0
         
         with open(self._logfile, 'a') as f:
             if write_header:
                 self._write_log_header(f)
             
-            # 逐步优化
+            # Stepwise optimization
             while step_counter < max_steps:
-                # 获取当前状态
+                # Get current state
                 opt_atoms = wrap_atoms(opt_atoms)
                 pos = self._get_flat_positions(opt_atoms)
                 forces = opt_atoms.get_forces()
                 fmax = np.sqrt((forces**2).sum(axis=1).max())
                 energy = opt_atoms.get_potential_energy()
-                self.fcalls += 1  # 统计力计算次数
+                self.fcalls += 1  # Count force evaluation
                 
-                # 计算到最近稳态的距离
+                # Compute distance to the nearest basin
                 min_dist = 9.9
                 nearest_id = -1
                 if self.n_basins > 0:
@@ -540,33 +579,33 @@ class BasinManager:
                     nearest_id = int(np.argmin(dists))
                     min_dist = dists[nearest_id]
                 
-                # 详细日志输出（仅verbose=True）
+                # Detailed log output (verbose=True only)
                 if self._verbose:
                     self._write_log_line(f, step_counter, min_dist, " ", nearest_id, energy, fmax, " ")
                 
-                # 检查是否命中已知稳态
+                # Check whether a known basin has been hit
                 if self.n_basins > 0 and min_dist < self._min_dist_threshold:
                     hit_basin_id = nearest_id
                     break
 
-                # 检查是否力收敛
+                # Check force convergence
                 if fmax < self._fmax:
                     converged = True
                     break
 
-                # 执行一步优化
+                # Execute one optimization step
                 opt.step()
                 step_counter += 1
             
-            # ===== 步骤4: 处理优化结果 =====
+            # ===== Step 4: Process optimization result =====
             
             if hit_basin_id is not None:
-                # 情况1: 优化过程中命中已知稳态
+                # Case 1: Hit a known basin during optimization
                 opt_atoms = wrap_atoms(opt_atoms)
                 final_pos = self._get_flat_positions(opt_atoms)
                 final_energy = opt_atoms.get_potential_energy()
                 final_forces = opt_atoms.get_forces()
-                self.fcalls += 1  # 统计力计算次数
+                self.fcalls += 1  # Count force evaluation
                 final_fmax = np.sqrt((final_forces**2).sum(axis=1).max())
                 
                 if self.n_basins > 0:
@@ -575,21 +614,21 @@ class BasinManager:
                 else:
                     final_min_dist = 0.0
                 
-                # 输出最终日志行
+                # Output final log line
                 self._write_log_line(f, step_counter, final_min_dist, " ", hit_basin_id, 
                                    final_energy, final_fmax, " ")
                 return hit_basin_id
             
             if converged:
-                # 情况2: 优化收敛到新位置
+                # Case 2: Optimization converged to a new position
                 opt_atoms = wrap_atoms(opt_atoms)
                 final_pos = self._get_flat_positions(opt_atoms)
                 final_energy = opt_atoms.get_potential_energy()
                 final_forces = opt_atoms.get_forces()
-                self.fcalls += 1  # 统计力计算次数
+                self.fcalls += 1  # Count force evaluation
                 final_fmax = np.sqrt((final_forces**2).sum(axis=1).max())
                 
-                # 再次检查是否接近已知稳态（可能在最后一步收敛到已知稳态）
+                # Re-check proximity to known basins (last step may converge to a known basin)
                 is_new = True
                 final_id = -1
                 min_dist_final = 0.0
@@ -600,22 +639,22 @@ class BasinManager:
                     min_dist_final = dists[nearest_id]
                     
                     if min_dist_final < self._min_dist_threshold:
-                        # 收敛到已知稳态
+                        # Converged to a known basin
                         final_id = nearest_id
                         is_new = False
                 
                 if is_new:
-                    # 情况2a: 真正的新位置，需要判断是稳态还是鞍点
-                    # 计算Hessian最小特征值
+                    # Case 2a: Genuinely new position — determine basin or saddle point
+                    # Compute smallest Hessian eigenvalue
                     eig_val = self._calc_min_eigenvalue(opt_atoms)
                     
                     if eig_val < 0:
-                        # 鞍点，不注册
+                        # Saddle point — do not register
                         self._write_log_line(f, step_counter, 0.0, "SADDLE", -1, 
                                            final_energy, final_fmax, eig_val)
                         return None
                     
-                    # 新稳态，注册
+                    # New basin — register
                     final_id = self.n_basins
                     self.n_basins += 1
                     self.known_minima_positions.append(final_pos)
@@ -623,10 +662,10 @@ class BasinManager:
                     self.known_minima_forces.append(final_forces)
                     self._dirty_centers = True
                     
-                    # 计算到其他稳态的最小距离（用于日志）
+                    # Compute minimum distance to other basins (for logging)
                     if self.n_basins > 1:
                         other_dists = self._calc_pbc_distances(final_pos, 
-                                                               self._cached_centers_array)
+                                                              self._cached_centers_array)
                         min_dist_log = np.min(other_dists) if len(other_dists) > 0 else 0.0
                     else:
                         min_dist_log = 0.0
@@ -635,62 +674,67 @@ class BasinManager:
                                        final_energy, final_fmax, eig_val)
                     return final_id
                 else:
-                    # 情况2b: 收敛到已知稳态
+                    # Case 2b: Converged to a known basin
                     self._write_log_line(f, step_counter, min_dist_final, " ", final_id, 
                                        final_energy, final_fmax, " ")
                     return final_id
             
-            # 情况3: 达到最大步数未收敛
+            # Case 3: Reached max steps without convergence
             f.write(f"# WARNING: Optimization did not converge within {max_steps} steps\n")
             return None
 
     def export_basin(self, basin_id: int) -> Atoms:
         """
-        导出指定稳态的原子结构
-        
-        返回一个包含指定稳态完整信息的Atoms对象，包括位置、能量、力。
-        位置已自动进行周期性包裹，确保在主晶胞内。
-        
+        Export the atomic structure of a specified basin.
+
+        Returns an Atoms object with full information for the specified
+        basin, including positions, energy, and forces. Positions are
+        automatically PBC-wrapped to lie within the primary cell.
+
         Parameters
         ----------
         basin_id : int
-            要导出的稳态ID，必须在有效范围内 [0, n_basins-1]
-        
+            ID of the basin to export. Must be in the valid range
+            [0, n_basins-1].
+
         Returns
         -------
         atoms : Atoms
-            稳态的原子结构，包含：
-            - 优化后的原子位置（已包裹到主晶胞）
-            - 通过SinglePointCalculator设置的能量和力
-            - 原子系统的拓扑信息（符号、晶胞、PBC）
-        
+            The basin's atomic structure, containing:
+            - Optimized atomic positions (wrapped to the primary cell)
+            - Energy and forces set via a SinglePointCalculator
+            - System topology (symbols, cell, PBC)
+
         Raises
         ------
         ValueError
-            如果basin_id超出有效范围，或atoms对象未初始化
-        
+            If basin_id is out of range, or the atoms object has not
+            been initialized.
+
         Examples
         --------
         >>> bm = BasinManager()
-        >>> # ... 识别一些稳态 ...
+        >>> # ... identify some basins ...
         >>>
-        >>> # 导出所有稳态
+        >>> # Export all basins
         >>> for i in range(bm.n_basins):
         >>>     atoms = bm.export_basin(i)
         >>>     print(f"Basin {i}: E = {atoms.get_potential_energy():.4f} eV")
         >>>     atoms.write(f"basin_{i}.xyz")
         >>>
-        >>> # 导出能量最低的稳态
+        >>> # Export the lowest-energy basin
         >>> lowest_id = np.argmin(bm.known_minima_energies)
         >>> lowest_atoms = bm.export_basin(lowest_id)
-        
+
         Notes
         -----
-        - 返回的Atoms对象是独立副本，修改不会影响BasinManager内部数据
-        - 位置已考虑周期性边界条件进行包裹
-        - 能量和力通过SinglePointCalculator设置，无需重新计算
+        - The returned Atoms object is an independent copy; modifications
+          do not affect BasinManager internal data.
+        - Positions are PBC-wrapped.
+        - Energy and forces are set via a SinglePointCalculator so no
+          recalculation is needed.
         """
-        # 验证basin_id
+        # Validate basin_id
         if basin_id < 0 or basin_id >= self.n_basins:
             raise ValueError(
                 f"Invalid basin_id {basin_id}. "
@@ -703,12 +747,12 @@ class BasinManager:
                 "This should not happen if BasinManager was used correctly."
             )
         
-        # 创建原子对象
+        # Create atoms object
         atoms = self.atoms.copy()
         atoms.set_positions(self.known_minima_positions[basin_id].reshape(-1, 3))
         atoms = wrap_atoms(atoms)
         
-        # 设置SinglePointCalculator
+        # Attach SinglePointCalculator
         atoms.calc = SinglePointCalculator(
             atoms,
             energy=self.known_minima_energies[basin_id],
@@ -718,30 +762,31 @@ class BasinManager:
         return atoms
 
     # ========================================
-    # 内部辅助方法（用户通常不需要直接调用）
+    # Internal helper methods (users normally do not call these directly)
     # ========================================
 
     def _get_flat_positions(self, atoms: Atoms) -> np.ndarray:
         """
-        获取扁平化的原子位置数组
-        
+        Get flattened atomic position array.
+
         Parameters
         ----------
         atoms : Atoms
-            原子对象
-        
+            Atoms object
+
         Returns
         -------
         positions : np.ndarray, shape (N_atoms * 3,)
-            扁平化的位置数组
+            Flattened position array
         """
         return atoms.get_positions().flatten()
 
     def _wrap_stored_positions(self):
         """
-        对所有已存储的稳态位置进行周期性包裹
-        
-        用于加载旧数据时的兼容性处理，确保所有位置都在主晶胞内。
+        PBC-wrap all stored basin positions.
+
+        Used for backward-compatibility when loading old data,
+        ensuring all positions lie within the primary cell.
         """
         if not self.known_minima_positions or self.atoms is None:
             return
@@ -757,21 +802,22 @@ class BasinManager:
 
     def _calc_pbc_distances(self, pos: np.ndarray, centers: np.ndarray) -> np.ndarray:
         """
-        计算考虑周期性边界条件的距离
-        
-        使用最小镜像约定计算给定位置到所有稳态中心的距离。
-        
+        Compute PBC-aware distances using the minimum-image convention.
+
+        Computes the distance from a given position to all basin centers
+        under periodic boundary conditions.
+
         Parameters
         ----------
         pos : np.ndarray, shape (N_atoms * 3,)
-            当前位置（扁平化）
+            Current position (flattened)
         centers : np.ndarray, shape (N_basins, N_atoms * 3)
-            所有稳态中心的位置数组
-        
+            Position array of all basin centers
+
         Returns
         -------
         distances : np.ndarray, shape (N_basins,)
-            到每个稳态中心的L2距离
+            L2 distance to each basin center
         """
         if self.atoms is None:
             return np.linalg.norm(centers - pos, axis=1)
@@ -790,32 +836,33 @@ class BasinManager:
         pos_3d = pos.reshape(-1, 3)  # (n_atoms, 3)
         centers_3d = centers.reshape(n_basins, n_atoms, 3)  # (n_basins, n_atoms, 3)
         
-        # 计算位移向量
+        # Compute displacement vectors
         diff = centers_3d - pos_3d  # (n_basins, n_atoms, 3)
         
-        # 转换为分数坐标
+        # Convert to fractional coordinates
         cell_inv = np.linalg.inv(cell)
         scaled_diff = diff @ cell_inv  # (n_basins, n_atoms, 3)
         
-        # 应用最小镜像约定
+        # Apply minimum-image convention
         for i in range(3):
             if pbc[i]:
                 scaled_diff[:, :, i] = scaled_diff[:, :, i] - np.round(scaled_diff[:, :, i])
         
-        # 转换回笛卡尔坐标
+        # Convert back to Cartesian coordinates
         min_diff = scaled_diff @ cell  # (n_basins, n_atoms, 3)
         
-        # 计算L2距离
+        # Compute L2 distance
         distances = np.sqrt(np.sum(min_diff ** 2, axis=(1, 2)))  # (n_basins,)
         
         return distances
 
     def _ensure_centers_cache(self):
         """
-        维护稳态中心缓存
-        
-        仅当有新稳态加入时(_dirty_centers=True)才重新构建numpy数组，
-        避免重复的列表到数组转换开销。
+        Maintain the basin-centers cache.
+
+        Rebuilds the NumPy array only when new basins have been added
+        (_dirty_centers=True) to avoid repeated list-to-array conversion
+        overhead.
         """
         if self._dirty_centers:
             if self.known_minima_positions:
@@ -826,19 +873,20 @@ class BasinManager:
 
     def _get_mmcalc(self, atoms: Atoms) -> MinModeCalculator:
         """
-        获取或创建MinModeCalculator实例
-        
-        用于计算Hessian最小特征值以判断稳态/鞍点。
-        
+        Get or create a MinModeCalculator instance.
+
+        Used to compute the smallest Hessian eigenvalue for determining
+        basin vs. saddle point.
+
         Parameters
         ----------
         atoms : Atoms
-            原子对象（需要已设置calculator）
-        
+            Atoms object (must have a calculator attached)
+
         Returns
         -------
         mmcalc : MinModeCalculator
-            最小模式计算器实例
+            Minimum-mode calculator instance
         """
         if self._mm_calc is None:
             self._mm_calc = MinModeCalculator(std_calc=atoms.calc)
@@ -848,44 +896,56 @@ class BasinManager:
 
     def _calc_min_eigenvalue(self, atoms: Atoms) -> float:
         """
-        计算Hessian矩阵的最小特征值
-        
-        用于判断优化收敛点是否为稳态（特征值>0）或鞍点（特征值<0）。
-        这是一个相对昂贵的操作，使用有限差分法计算Hessian。
-        
+        Compute the smallest eigenvalue of the Hessian matrix.
+
+        Used to determine whether an optimization-converged point is a
+        basin (eigenvalue > 0) or a saddle point (eigenvalue < 0).
+        This is relatively expensive and uses finite differences to
+        compute the Hessian.
+
         Parameters
         ----------
         atoms : Atoms
-            优化收敛后的原子结构
-        
+            Atomic structure after optimization convergence
+
         Returns
         -------
         eig_val : float
-            Hessian矩阵的最小特征值
-        
+            Smallest eigenvalue of the Hessian matrix
+
         Notes
         -----
-        每次调用前强制将 min_mode 重置为 None，迫使 Lanczos 从随机向量出发，
-        避免复用上次（通常在盆地底部）算出的正曲率方向作为初猜，从而防止
-        Krylov 子空间被限制在正交补空间、错过真实虚频方向、将鞍点误判为稳态。
-        同理，调用后也清零 min_mode，杜绝跨调用的残留污染。
-        注意：BasinManager._mm_calc 仅在本方法中使用，此处清零不影响
-        HybridBoostCalculator._mm_calc 或其他模块的热启动逻辑。
+        Before each call, min_mode is forcibly reset to None so that
+        the Lanczos iteration starts from a random vector. This prevents
+        reusing the positive-curvature direction found at a previous
+        basin bottom as the initial guess, which would confine the
+        Krylov subspace to an orthogonal complement, miss a true
+        imaginary-frequency direction, and misclassify a saddle point
+        as a basin. After the calculation, min_mode is also cleared to
+        prevent cross-call residue contamination.
+
+        Note: BasinManager._mm_calc is used only within this method.
+        Clearing it here does not affect HybridBoostCalculator._mm_calc
+        or the warm-start logic of other modules.
         """
         mm_atoms = atoms.copy()
         mm_calc = self._get_mmcalc(atoms)
-        # 强制从随机向量出发，防止继承上次盆地底部的正曲率 min_mode 作为初猜，
-        # 导致 Lanczos 在鞍点处找不到真实负曲率方向而返回假正特征值。
+        # Force restart from a random vector to prevent inheriting a
+        # positive-curvature min_mode from a previous basin bottom as
+        # the initial guess, which would cause Lanczos to miss the
+        # true negative-curvature direction at a saddle and return a
+        # false-positive eigenvalue.
         mm_calc.parameters["min_mode"] = None
         mm_atoms.calc = mm_calc
         mm_atoms.calc.calculate(mm_atoms)
         eig_val = mm_atoms.calc.parameters["eig_values"][0]
         
-        # 累加 MinModeCalculator 的 fcalls
+        # Accumulate MinModeCalculator's fcalls
         self.fcalls += mm_calc.fcalls
         mm_calc.fcalls = 0
         
-        # 清理临时引用，并二次清零 min_mode 防止残留污染下一次调用
+        # Clean up temporary references and clear min_mode again to
+        # prevent residue from contaminating the next call
         mm_atoms.calc = None
         if hasattr(mm_calc, 'atoms'):
             mm_calc.atoms = None
@@ -897,14 +957,14 @@ class BasinManager:
 
     def _clear_calc_atoms(self, calc):
         """
-        清理calculator的内部atoms引用
-        
-        防止循环引用导致的内存泄漏。
-        
+        Clear the internal atoms reference of a calculator.
+
+        Prevents memory leaks caused by circular references.
+
         Parameters
         ----------
         calc : Calculator
-            要清理的计算器
+            The calculator to clean up.
         """
         if calc is None:
             return
@@ -915,21 +975,22 @@ class BasinManager:
 
     def _get_optimizer(self, atoms: Atoms):
         """
-        获取或复用优化器实例
-        
-        首次调用时创建优化器，之后复用并重置内部状态以提高效率。
-        
+        Get or reuse an optimizer instance.
+
+        Creates the optimizer on the first call; on subsequent calls
+        reuses it and resets its internal state for efficiency.
+
         Parameters
         ----------
         atoms : Atoms
-            要优化的原子对象
-        
+            Atoms object to optimize
+
         Returns
         -------
         optimizer : Optimizer
-            优化器实例
+            Optimizer instance
         opt_atoms : Atoms
-            优化器绑定的原子对象
+            Atoms object bound to the optimizer
         """
         self._opt_atoms = atoms.copy()
         self._opt_atoms.calc = atoms.calc
@@ -939,12 +1000,12 @@ class BasinManager:
 
     def _write_log_header(self, file_handle):
         """
-        写入日志文件头部
-        
+        Write the log-file header.
+
         Parameters
         ----------
         file_handle : file object
-            打开的文件句柄
+            Open file handle
         """
         header = (
             f"{'Step':>6} "
@@ -960,34 +1021,35 @@ class BasinManager:
     def _write_log_line(self, file_handle, step, min_dist, reason, basin_id, 
                        energy, fmax, eig_val):
         """
-        格式化写入单行日志
-        
+        Format and write a single log line.
+
         Parameters
         ----------
         file_handle : file object
-            打开的文件句柄
+            Open file handle
         step : int
-            当前优化步数
+            Current optimization step
         min_dist : float
-            到最近稳态的距离
+            Distance to the nearest basin
         reason : str or float
-            终止原因（"FAST"=快速命中, "SADDLE"=鞍点, " "=正常）
+            Termination reason ("FAST" = fast hit, "SADDLE" = saddle
+            point, " " = normal)
         basin_id : int
-            稳态ID（-1表示鞍点）
+            Basin ID (–1 indicates a saddle point)
         energy : float
-            当前能量
+            Current energy
         fmax : float
-            当前最大力
+            Current maximum force component
         eig_val : float or str
-            Hessian最小特征值（" "表示未计算）
+            Smallest Hessian eigenvalue (" " means not computed)
         """
-        # 格式化reason
+        # Format reason
         if isinstance(reason, str):
             reason_str = f"{reason:>6s}"
         else:
             reason_str = f"{reason:>6.2f}"
         
-        # 格式化eig_val
+        # Format eig_val
         if isinstance(eig_val, str):
             eig_str = f"{eig_val:>12s}"
         else:
@@ -998,7 +1060,7 @@ class BasinManager:
             f"{min_dist:>6.2f} "
             f"{reason_str} "
             f"{basin_id:>6d} "
-            f"{energy:>12.4f} "
+            f"{energy:>12.6f} "
             f"{fmax:>12.4f} "
             f"{eig_str}\n"
         )

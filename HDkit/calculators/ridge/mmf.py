@@ -7,35 +7,37 @@ __author__ = "Qian Lixiang"
 __email__ = "649811459@qq.com"
 
 """
-Min-Mode Following (MMF) 超动力学计算模块
+Min-Mode Following (MMF) Hyperdynamics Calculation Module
 
-本模块实现基于脊线(Ridge)的偏置势计算器，用于加速稀有事件采样。
-通过沿最小模式方向"爬坡"找到两个稳态之间的势能脊线，然后施加偏置势降低逃逸能垒。
+This module implements a ridge-based bias-potential calculator for accelerating
+rare event sampling. It climbs along the Hessian minimum-mode direction to
+locate the potential energy ridge between two basins, then applies a bias
+potential to lower the escape barrier.
 
-核心原理：
-1. 识别当前所处的稳态(Basin)
-2. 沿Hessian最小特征向量方向爬坡
-3. 找到势能脊线（两个稳态的分界线）
-4. 在脊线处计算偏置势和偏置力
-5. 返回修正后的能量和力给MD模拟
+Core Principles:
+1. Identify the current basin
+2. Climb along the Hessian minimum-eigenvector direction
+3. Locate the potential energy ridge (the dividing surface between two basins)
+4. Compute the bias potential and bias forces at the ridge
+5. Return corrected energy and forces to the MD simulation
 
-典型用法:
+Typical usage:
     >>> from ase.calculators.emt import EMT
     >>> from ase import Atoms
     >>> from ase.md import VelocityVerlet
     >>> 
-    >>> # 创建MMF计算器
+    >>> # Create an MMF calculator
     >>> mmf_calc = MMFPathCalculator(
     >>>     std_calc=EMT(),
-    >>>     emax=1.0,  # 最大偏置能量(eV)
-    >>>     stepsize=0.1,  # 爬坡步长(Å)
-    >>>     temperature_K=300  # 用于计算加速因子
+    >>>     emax=0.5,  # Maximum bias energy (eV)
+    >>>     stepsize=0.05,  # Climbing step size (Å)
+    >>>     temperature_K=300  # Used to compute the boost factor
     >>> )
     >>> 
     >>> atoms = Atoms('Cu4', ...)
     >>> atoms.calc = mmf_calc
     >>> 
-    >>> # 运行超动力学MD
+    >>> # Run hyperdynamics MD
     >>> dyn = VelocityVerlet(atoms, timestep=1.0*units.fs)
     >>> dyn.run(1000)
 """
@@ -53,147 +55,161 @@ from ...basin import BasinManager
 
 class MMFPathCalculator(MinModeCalculator):
     """
-    Min-Mode Following (MMF) 超动力学偏置势计算器
+    Min-Mode Following (MMF) Hyperdynamics Bias-Potential Calculator
     
-    通过沿Hessian最小模式方向爬坡找到势能脊线，在脊线处施加偏置势以加速稀有事件采样。
-    是Hyperdynamics方法的一种实现，可将MD时间尺度提升数个数量级。
+    Climb along the Hessian minimum-mode direction to locate the potential
+    energy ridge, then apply a bias potential at the ridge to accelerate
+    rare event sampling.  This is one realisation of hyperdynamics, capable
+    of boosting the MD time scale by several orders of magnitude.
     
-    算法流程：
-    1. **稳态识别**：使用BasinManager判断当前所处的稳态
-    2. **爬坡过程**：沿最小模式方向逐步前进，寻找势能脊线
-    3. **脊线判定**：
-       - 步长回退检测到局域极大值（缩步后能量仍下降）→ 以局域极大值位置为脊线
-       - 优化收敛到鞍点 → 当前点是脊线
-       - 进入新稳态 → 最后两步中点是脊线
-       - 超过emax → 停止爬坡，施加emax作为偏置能
-    4. **偏置计算**：
-       - Simple算法：直接使用脊线处的力
-       - Shear算法：通过Jacobian链式法则将力传回初始位置（更精确）
-    5. **返回结果**：修正后的能量E+ΔE和力F+ΔF
+    Algorithm flow:
+    1. **Basin identification**: use BasinManager to identify the current basin
+    2. **Climbing**: step forward along the minimum-mode direction to seek the
+       potential energy ridge
+    3. **Ridge determination**:
+       - Rollback with step-size reduction detects a local maximum (energy 
+         still drops after reducing step) → use the local maximum position as
+         the ridge
+       - Optimisation converges to a saddle point → current point is the ridge
+       - Enter a new basin → midpoint of the last two positions is the ridge
+       - Exceeds emax → stop climbing, apply emax as the bias energy
+    4. **Bias calculation**:
+       - Simple algorithm: directly use the forces at the ridge
+       - Shear algorithm: propagate forces back to the initial position via
+         the Jacobian chain rule (more accurate)
+    5. **Return results**: corrected energy E+ΔE and forces F+ΔF
     
     Parameters
     ----------
     std_calc : Calculator
-        标准势能面计算器（如EMT, VASP等）
+        Standard PES calculator (e.g., EMT, VASP)
     
     mmcalc : MinModeCalculator, optional
-        自定义的最小模式计算器。如果为None，自动创建默认配置。
+        Custom minimum-mode calculator. If None, a default configuration is
+        created automatically.
     
-    stepsize : float, default=0.1
-        爬坡步长（Å）。每步沿最小模式方向移动的距离。
-        - 过小：爬坡缓慢，计算量大
-        - 过大：可能跳过脊线
-        推荐范围：0.05 ~ 0.2 Å
+    stepsize : float, default=0.05
+        Climbing step size (Å). Distance moved per step along the minimum-mode
+        direction.
+        - Too small: slow climbing, high computational cost
+        - Too large: may overshoot the ridge
+        Recommended range: 0.05 ~ 0.2 Å
     
     logfile : str or file object, default='climb.log'
-        爬坡过程日志文件。记录每步的能量、Basin ID等信息。
+        Climbing process log file. Records energy, basin ID, etc. for each step.
     
     verbose : bool, default=False
-        是否输出详细爬坡日志。
-        - False: 只输出每次爬坡的最终结果
-        - True: 输出每一步的详细信息
+        Whether to output detailed climbing logs.
+        - False: only output the final result of each climb
+        - True: output detailed information for every step
     
-    emax : float, default=1.0
-        最大偏置能量（eV）。如果在emax范围内未找到脊线，停止爬坡并施加emax作为偏置。
-        - 过小：可能无法加速某些事件
-        - 过大：可能引入非物理行为
-        推荐范围：0.5 ~ 2.0 eV（视系统而定）
+    emax : float, default=0.5
+        Maximum bias energy (eV). If no ridge is found within emax range,
+        stop climbing and apply emax as the bias.
+        - Too small: may fail to accelerate certain events
+        - Too large: may introduce non-physical behaviour
+        Recommended range: 0.5 ~ 2.0 eV (system-dependent)
     
-    max_nsteps : int, default=100
-        最大爬坡步数。防止无限爬坡。
+    max_nsteps : int, default=200
+        Maximum climbing steps. Prevents infinite climbing.
     
     J_algo : str, default='shear'
-        Jacobian传播算法：
-        - 'simple' 或 's': 直接使用脊线处的力（简单但不够精确）
-        - 'shear' 或 'h': 使用Jacobian链式法则传播力（推荐）
-        Shear算法考虑了爬坡路径上最小模式方向的旋转，更准确地反映力的传播。
+        Jacobian propagation algorithm:
+        - 'simple' or 's': directly use ridge forces (simple but less accurate)
+        - 'shear' or 'h': use the Jacobian chain rule to propagate forces
+          (recommended)
+        The Shear algorithm accounts for the rotation of the minimum-mode
+        direction along the climbing path, yielding more accurate force
+        propagation.
     
     temperature_K : float, optional
-        系统温度（K）。用于计算加速因子ACT = exp(ΔE/kT)。
-        如果提供，会在bias.log中输出ACT。
+        System temperature (K). Used to compute the boost factor
+        ACT = exp(ΔE/kT).
+        If provided, ACT is written to bias.log.
     
     mode_log : str, optional
-        MinModeCalculator的日志文件路径。默认为None（不输出）。
+        Log file path for MinModeCalculator. Defaults to None (no output).
     
     write_basins : bool, default=True
-        是否将新发现的稳态写入'basins.traj'文件。
+        Whether to write newly discovered basins to 'basins.traj'.
     
     write_climb_traj : bool, default=False
-        是否将爬坡轨迹写入'climb.traj'文件。用于调试和可视化。
+        Whether to write the climbing trajectory to 'climb.traj'.
+        For debugging and visualisation.
     
     write_ridges : bool, default=False
-        是否将脊线结构写入'ridges.traj'文件。
+        Whether to write ridge structures to 'ridges.traj'.
     
     write_bias_log : bool, default=True
-        是否将偏置能量、温度、ACT写入'bias.log'文件。
+        Whether to write bias energy, temperature, and ACT to 'bias.log'.
     
     bias_interval : int, default=1
-        bias.log输出间隔。每调用calculate() N次输出一次。
-        用于减少I/O开销。
+        bias.log output interval. Output once every N calculate() calls.
+        Used to reduce I/O overhead.
     
     pbc_wrap : bool, default=True
-        每次calculate后是否将原子包裹到主晶胞内。
-        推荐开启以避免原子"飞出"晶胞。
+        Whether to wrap atoms into the primary cell after each calculate().
+        Recommended to keep on to prevent atoms from "flying out" of the cell.
     
     Attributes
     ----------
     bias_energy : float
-        当前的偏置能量（eV）
+        Current bias energy (eV)
     
     bias_forces : np.ndarray
-        当前的偏置力（eV/Å）
+        Current bias forces (eV/Å)
     
     basin_id : int
-        当前所处的稳态ID
+        ID of the current basin
 
     ridge_forces : np.ndarray
-        脊线处的标准力（eV/Å）
+        Standard forces at the ridge (eV/Å)
     
     Examples
     --------
-    基本用法：
+    Basic usage:
     
     >>> from ase.build import bulk
     >>> from ase.calculators.emt import EMT
     >>> from ase.md import VelocityVerlet
     >>> from ase import units
     >>> 
-    >>> # 创建原子结构
+    >>> # Create atomic structure
     >>> atoms = bulk('Cu', 'fcc', a=3.6).repeat((2, 2, 2))
     >>> 
-    >>> # 创建MMF计算器
+    >>> # Create an MMF calculator
     >>> mmf_calc = MMFPathCalculator(
     >>>     std_calc=EMT(),
-    >>>     emax=1.0,
-    >>>     stepsize=0.1,
+    >>>     emax=0.5,
+    >>>     stepsize=0.05,
     >>>     temperature_K=300,
     >>>     verbose=True
     >>> )
     >>> 
     >>> atoms.calc = mmf_calc
     >>> 
-    >>> # 运行超动力学MD
+    >>> # Run hyperdynamics MD
     >>> dyn = VelocityVerlet(atoms, timestep=1.0*units.fs)
     >>> for i in range(1000):
     >>>     dyn.run(10)
     >>>     bias_E = mmf_calc.parameters['bias_energy']
     >>>     print(f"Step {i*10}, Bias energy: {bias_E:.3f} eV")
     
-    调整爬坡参数：
+    Adjusting climbing parameters:
     
     >>> mmf_calc = MMFPathCalculator(
     >>>     std_calc=EMT(),
-    >>>     emax=0.8,  # 降低最大偏置能量
-    >>>     stepsize=0.05,  # 减小步长，提高局域极大值检测精度
-    >>>     max_nsteps=200,  # 增加最大步数
-    >>>     J_algo='shear',  # 使用更精确的Jacobian传播
+    >>>     emax=0.8,  # Lower maximum bias energy
+    >>>     stepsize=0.1,  # Larger step size for faster climbing
+    >>>     max_nsteps=200,  # Increase maximum steps
+    >>>     J_algo='shear',  # Use more accurate Jacobian propagation
     >>> )
     
-    使用自定义MinModeCalculator：
+    Using a custom MinModeCalculator:
     
     >>> mmcalc = MinModeCalculator(
     >>>     std_calc=EMT(),
-    >>>     algo='Vibration',  # 使用Vibration方法
+    >>>     algo='Vibration',  # Use the Vibration method
     >>>     tolerance=1e-3,
     >>> )
     >>> mmf_calc = MMFPathCalculator(
@@ -203,13 +219,16 @@ class MMFPathCalculator(MinModeCalculator):
     
     Notes
     -----
-    - calculate()返回的能量和力已包含偏置项：E_total = E0 + ΔE, F_total = F0 + ΔF
-    - 偏置能量通常为正值，降低逃逸能垒
-    - ACT(Accelerated Corrected Time)表示时间加速因子
-    - 如果一开始就在鞍点附近(basin_id=None)，不施加偏置
-    - 爬坡过程会自动处理周期性边界条件
-    - BasinManager用于识别稳态，其输出写入'rlx.log'
-    - Shear算法的计算成本与Simple相同，但精度更高，推荐使用
+    - The energy and forces returned by calculate() already include the bias
+      terms: E_total = E0 + ΔE, F_total = F0 + ΔF
+    - The bias energy is usually positive, lowering the escape barrier
+    - ACT (Accelerated Corrected Time) represents the time boost factor
+    - If the system is near a saddle point (basin_id=None), no bias is applied
+    - The climbing process automatically handles periodic boundary conditions
+    - BasinManager is used for basin identification; its output goes to
+      'rlx.log'
+    - The Shear algorithm costs the same as Simple but is more accurate;
+      it is recommended
     
     References
     ----------
@@ -221,7 +240,7 @@ class MMFPathCalculator(MinModeCalculator):
     """
 
     default_parameters = {
-        # 结果存储
+        # Results storage
         **MinModeCalculator.default_parameters,
         "basin_id": -1,
         "bias_energy": None,
@@ -233,19 +252,19 @@ class MMFPathCalculator(MinModeCalculator):
     def __init__(
         self,
         std_calc: Calculator,
-        # 计算器设置
+        # Calculator settings
         J_algo: str = "shear",
         emax: float = 0.5,
         max_nsteps: int = 200,
         temperature_K: Optional[float] = None,
         stepsize: float = 0.05,
-        # 输出设置
+        # Output settings
         mode_log: Optional[Union[str, object]] = None,
         write_basins: bool = True,
         write_climb_traj: bool = False,
         write_ridges: bool = False,
         write_bias_log: bool = True,
-        # 其他设置
+        # Other settings
         logfile: Optional[Union[str, object]] = "climb.log",
         verbose: bool = False,
         **kwargs,
@@ -636,5 +655,5 @@ class MMFPathCalculator(MinModeCalculator):
             )
         self.bias_log.flush()
 
-        # 清理内存
+        # Clean up memory
         gc.collect()
