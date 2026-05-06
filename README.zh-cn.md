@@ -1,4 +1,4 @@
-# HDkit —— 超动力学示例套件
+# HDkit —— 超动力学模拟算例
 
 [English](README.md) | [简体中文](README.zh-cn.md)
 
