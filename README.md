@@ -41,8 +41,8 @@ This repository accompanies the paper and provides:
 Clone the repository and enter the project directory:
 
 ```bash
-git clone https://github.com/ZhangLabTHU/HDkit.git
-cd HDkit
+git clone https://github.com/ZhangLabTHU/HDkit-example.git
+cd HDkit-example
 ```
 
 The repository contains everything needed to run the examples:

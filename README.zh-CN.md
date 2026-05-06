@@ -1,0 +1,271 @@
+# HDkit — 超动力学示例套件
+
+一套轻量级、免安装的**超动力学 (Hyperdynamics, HD) 分子动力学**模拟工具包，为 Cu(100) 表面扩散提供了统一的运行程序。
+
+> **操作系统**：本工具包仅支持 **Linux 和 macOS**。Windows 用户请先安装 [WSL](https://learn.microsoft.com/zh-cn/windows/wsl/install)。
+
+本仓库附带论文提供以下内容：
+
+- **`HDkit/`** — 精简的 Python 包，包含核心 HD 计算器（Bond-Boost、MMF、BasinManager）
+- **`run_compare.py`** — 在同一结构上对比三种 HD 方法的偏置（单步评估）
+- **`run_hd.py`** — 使用 Bond-Boost、MMF 或 J-MMF 运行多步 HD-MD
+
+> **注意**：HDkit 是论文中算法的**简化参考实现**。它专注于核心方法的正确性；
+> 一些工程细节（错误恢复、MPI 支持、生产级 I/O）被刻意保持最小化。
+> 示例中的模拟时长（BB: 10 ns; MMF/J-MMF: 100 ps）设置为让用户能在
+> 几分钟到几小时内验证代码能否运行——论文中报告的结果需要
+> 在 HPC 资源上进行更长时间（µs 量级）的运行。
+
+---
+
+## 目录
+
+- [快速开始](#快速开始)
+  - [获取仓库](#获取仓库)
+  - [环境配置](#环境配置)
+  - [验证安装](#验证安装)
+- [仓库结构](#仓库结构)
+- [偏置对比 (`run_compare.py`)](#偏置对比-run_comparepy)
+- [HD 模拟 (`run_hd.py`)](#hd-模拟-run_hdpy)
+- [输出文件](#输出文件)
+- [参考文献](#参考文献)
+
+---
+
+## 快速开始
+
+### 获取仓库
+
+```bash
+git clone https://github.com/ZhangLabTHU/HDkit-example.git
+cd HDkit-example
+```
+
+仓库包含运行示例所需的一切：
+
+| 文件/目录 | 用途 |
+|---|---|
+| `HDkit/` | 核心 HD 计算器库（无需 `pip install`） |
+| `run_hd.py` | 多步 HD-MD 运行器 |
+| `run_compare.py` | 单步偏置对比 |
+| `verify.py` | 环境验证脚本 |
+| `hd-ini.traj` | HD 模拟初始结构 |
+| `compare-ini.traj` | 偏置对比初始结构 |
+| `Cu_u3.eam` | Cu EAM 势文件 |
+
+> **无需安装** — `HDkit/` 是一个位于项目根目录的轻量级包。
+> 只要从此目录运行脚本，`import HDkit` 即可正常工作，无需配置路径。
+
+### 环境配置
+
+| 依赖 | 最低版本 | 说明 |
+|---|---|---|
+| **Python** | ≥ 3.10 | 使用 `match/case` 语法 |
+| **ASE** | ≥ 3.22 | 提供 `NoseHooverChainNVT` 积分器；自带 NumPy |
+| **LAMMPS** | 需 Python 绑定 | EAM 势求解器 |
+
+推荐使用独立的 conda 环境。一条命令即可创建：
+
+```bash
+conda create -n HDkit -c conda-forge python=3.11 ase lammps -y
+conda activate HDkit
+```
+
+### 验证安装
+
+```bash
+python verify.py
+```
+
+所有检查通过后，即可运行示例。
+
+---
+
+## 仓库结构
+
+```
+.
+├── HDkit/                          # ← 轻量级 HD 工具包（无需安装）
+│   ├── __init__.py                 #   包初始化
+│   ├── basin.py                    #   BasinManager：势能面低谷识别与持久化
+│   └── calculators/
+│       ├── __init__.py             #   计算器注册
+│       ├── basecalculator.py       #   BaseCalculator：抽象基类
+│       ├── minmode.py              #   MinModeCalculator：Hessian 最小模式（Lanczos）
+│       ├── bondboost.py            #   BondBoostCalculator：Bond-Boost HD 方法
+│       └── ridge/
+│           ├── __init__.py
+│           └── mmf.py              #   MMFPathCalculator：MMF 脊线 HD 方法
+│
+├── run_hd.py                       # ← 多步 HD-MD 运行器 (bb | mmf | j-mmf)
+├── run_compare.py                  # ← 单步偏置对比
+├── verify.py                       #   安装验证脚本
+├── compare-ini.traj                #   偏置对比用初始结构
+├── hd-ini.traj                     #   HD-MD 用初始结构
+├── Cu_u3.eam                       #   Cu EAM 势文件
+├── README.md                       #   英文文档
+└── README.zh-CN.md                 #   中文文档
+```
+
+运行后，输出文件写入对应子目录（`Climb/`、`Bond-Boost/`、`MMF/` 或 `J_MMF/`）。
+
+### HDkit 模块
+
+| 模块 | 类 | 用途 |
+|---|---|---|
+| `basin.py` | `BasinManager` | 通过结构优化识别和缓存低谷（局部极小值）；通过 Hessian 特征值分析检测鞍点 |
+| `calculators/basecalculator.py` | `BaseCalculator` | 抽象基类，提供 `std_calc`（无偏势能面）接口和日志 |
+| `calculators/minmode.py` | `MinModeCalculator` | 通过 Lanczos 迭代或完全对角化计算 Hessian 最小特征向量；MMF 用于确定爬升方向 |
+| `calculators/bondboost.py` | `BondBoostCalculator` | Bond-Boost 方法：监测键应变，施加抛物线型偏置，在过渡态附近包络函数归零 |
+| `calculators/ridge/mmf.py` | `MMFPathCalculator` | MMF 方法：沿最小模式方向爬升定位能量脊线，在鞍点区域施加偏置。支持 Simple 和 Shear Jacobian 算法 |
+
+---
+
+## 偏置对比 (`run_compare.py`)
+
+`run_compare.py` 对**同一初始结构**（`compare-ini.traj`）分别应用三种 HD 方法，
+并输出每种方法产生的偏置能量和力的大小。这是一个**单步评估**——不执行 MD 积分——
+让你快速对比三种方法对同一原子构型的响应。
+
+```bash
+python run_compare.py
+```
+
+输出写入 `Climb/` 目录：
+
+| 文件 | 内容 |
+|---|---|
+| `compare-ini.traj` | 含 std_calc 能量和力的初始结构 |
+| `hyper-bb.traj` | Bond-Boost — 总（有偏）能量和力 |
+| `hyper-mmf.traj` | MMF Simple — 总能量和力 |
+| `hyper-j-mmf.traj` | J-MMF Shear — 总能量和力 |
+| `bias-bb.traj` | Bond-Boost — 仅偏置能量和力 |
+| `bias-mmf.traj` | MMF Simple — 仅偏置能量和力 |
+| `bias-j-mmf.traj` | J-MMF Shear — 仅偏置能量和力 |
+| `climb-mmf.traj` | MMF Simple — 完整爬升路径轨迹 |
+| `climb-j-mmf.traj` | J-MMF Shear — 完整爬升路径轨迹 |
+
+MMF 方法使用 `emax = −1`（无能量上限），因此爬升可一直到达脊线。
+`hyper-` 轨迹存储完整有偏能量和力；`bias-` 轨迹仅存储偏置贡献，
+适合使用标准能量/力数组的可视化工具。
+
+**诊断日志** — `run_compare.py` 开启详细输出，便于检查计算的每一步：
+
+| 日志 | 内容 |
+|---|---|
+| `rlx.log` | BasinManager — 低谷识别中的每步优化 |
+| `climb.log` | MMF — 每次爬升步骤（能量、低谷 ID、耗时） |
+| `mode.log` | MinModeCalculator — Lanczos 迭代和收敛角度 |
+| `Bond.log` | BondBoost — 低谷更新通知 |
+
+相比之下，`run_hd.py` 运行时会**关闭详细输出**，以避免长时间 MD 模拟中产生海量日志。
+
+---
+
+## HD 模拟 (`run_hd.py`)
+
+`run_hd.py` 从 `hd-ini.traj` 开始执行完整的超动力学 MD 模拟。
+它演示了三种方法的完整工作流——平衡、偏置加速生产、后处理。
+
+> **运行前**：激活 Python 环境并确保 LAMMPS 可访问。
+>
+> ```bash
+> conda activate HDkit
+> ```
+
+所有示例从**项目根目录**启动。无需 `pip install` 或路径配置——
+`import HDkit` 直接可用，因为脚本和 `HDkit/` 在同一目录下。
+
+```bash
+python run_hd.py bb        # Bond-Boost
+python run_hd.py mmf       # MMF Simple (J_algo="s")
+python run_hd.py j-mmf     # J-MMF Shear  (J_algo="h", 推荐)
+```
+
+方法名**不区分大小写**——`BB`、`bb`、`Bb` 均可。
+输出写入对应子目录（`Bond-Boost/`、`MMF/` 或 `J_MMF/`）。
+
+### 方法参数对比
+
+| 参数 | 方法 | emax | 生产时长 | loginterval | 特点 |
+|---|---|---|---|---|---|
+| `bb` | Bond-Boost | 0.3 eV | 10 ns | 10000 | ~1 次力计算/步，非常高效 |
+| `mmf` | MMF Simple | 0.5 eV | 100 ps | 100 | 直接使用脊线力（基线方法） |
+| `j-mmf` | J-MMF Shear | 0.5 eV | 100 ps | 100 | Jacobian 传播 + 正交投影 |
+
+所有运行使用 500 K、1 fs 时间步长、Nose–Hoover chain NVT 热浴、
+10 ps 无偏平衡，然后切换至 HD 计算器。
+
+> **模拟时长说明**：默认设置兼顾了周转时间和统计质量。
+> Bond-Boost 运行 10 ns 因为其计算成本很低（~1 次力计算/MD 步）。
+> MMF 方法运行 100 ps 因为每步涉及多次力评估（爬升、Hessian 对角化）。
+> 所有时长可通过 `run_hd.py` 中的 `prod_steps` 调整。
+> 论文报道的生产结果需要在 HPC 资源上进行更长时间（ns–µs 量级）的运行。
+
+### 模拟工作流
+
+1. 将 `hd-ini.traj` 和 `Cu_u3.eam` 复制到输出目录
+2. 读取结构 → 设置 LAMMPS EAM 计算器（无偏势能面）
+3. 初始化 Maxwell–Boltzmann 速度
+4. 平衡：500 K 下 NVT 10 ps（使用无偏 std_calc）
+5. 生产：NVT HD-MD — 10 ns（BB）或 100 ps（MMF / J-MMF）
+6. 后处理：提取低谷跃迁 → 计算 ACT
+7. 转换 `hd.traj` → `bias_hd.traj`（仅偏置轨迹，用于可视化）
+
+---
+
+## 输出文件
+
+### `run_hd.py` 输出（在 `Bond-Boost/`、`MMF/` 或 `J_MMF/` 目录中）
+
+长时间 MD 运行时日志输出**最小化**。
+
+| 文件 | 说明 |
+|---|---|
+| `bias.log` | 每步偏置能量、温度和 ACT（加速因子） |
+| `basins.traj` | ASE 轨迹文件，记录识别的低谷（稳态）结构 |
+| `basins.log` | 低谷跃迁汇总（帧号、距离、移动原子数） |
+| `hd.traj` | 完整 MD 轨迹 |
+| `bias_hd.traj` | 仅偏置轨迹（每帧的偏置能量和力） |
+| `HD.log` | ASE MD 日志（能量、温度等） |
+| `fin.traj` | 最终原子构型 |
+| `ini-T.traj` | 平衡后的结构 |
+| `basin.pkl` | Pickle 格式的 BasinManager 数据库（用于重启） |
+| `rlx.log` | BasinManager — 每次低谷识别的最终结果行 |
+| `Bond.log` | BB 内部日志（仅 Bond-Boost） |
+| `climb.log` | MMF 爬升日志（仅 MMF/J-MMF，仅输出最终结果） |
+| `mode.log` | Lanczos 头行（仅 MMF/J-MMF） |
+
+### `run_compare.py` 输出（在 `Climb/` 目录中）
+
+日志输出**详细**——记录每一步优化、爬升迭代和 Lanczos 收敛检查。
+
+| 文件 | 说明 |
+|---|---|
+| `hyper-bb.traj` / `hyper-mmf.traj` / `hyper-j-mmf.traj` | 总（有偏）能量和力 |
+| `bias-bb.traj` / `bias-mmf.traj` / `bias-j-mmf.traj` | 仅偏置能量和力 |
+| `climb-mmf.traj` / `climb-j-mmf.traj` | 完整爬升路径轨迹（仅 MMF） |
+| `compare-ini.traj` | 含 std_calc 能量和力的初始结构 |
+| `rlx.log` | BasinManager — 每次低谷识别的每一步优化 |
+| `climb.log` | MMF — 每次爬升步骤（步号、能量、低谷 ID、时间） |
+| `mode.log` | MinModeCalculator — Lanczos 迭代细节和收敛情况 |
+| `Bond.log` | BondBoost — 低谷更新通知 |
+
+### 关键指标
+
+- **ACT**（Accelerated Corrected Time，加速校正时间）：$\text{ACT} = \exp(\Delta V / k_BT)$，瞬态时间加速因子。
+- **HD time**（超动力学时间）：$\langle\text{ACT}\rangle \times t_\text{wall}$，考虑偏置后的有效模拟时间。
+
+---
+
+## 参考文献
+
+1. Voter, A. F. Hyperdynamics: Accelerated molecular dynamics of infrequent events. *Phys. Rev. Lett.* **78**, 3908–3911 (1997).
+2. Miron, R. A. & Fichthorn, K. A. Accelerated molecular dynamics with the Bond-Boost method. *J. Chem. Phys.* **119**, 6210–6216 (2003).
+3. Xiao, P., Duncan, J., Zhang, L. & Henkelman, G. Ridge-based bias potentials to accelerate molecular dynamics. *J. Chem. Phys.* **143**, 244104 (2015).
+
+---
+
+## 许可
+
+本代码仅用于学术研究目的。如果在工作中使用此工具包，请引用相关参考文献。
