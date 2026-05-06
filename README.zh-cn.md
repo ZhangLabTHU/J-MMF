@@ -12,6 +12,24 @@
 - **`run_compare.py`** — 在同一结构上对比三种 HD 方法的偏置（单步评估）
 - **`run_hd.py`** — 使用 Bond-Boost、MMF 或 J-MMF 运行多步 HD-MD
 
+---
+
+## 关于
+
+**HDkit** 是从 **[DLTS](https://github.com/ZhangLabTHU)**（Deep Long Time Simulation package，
+深度长时模拟包）中提取的轻量级超动力学工具包。DLTS 是由
+[ZhangLab](https://www.zhanglab-thu.com)（[@ZhangLabTHU](https://github.com/ZhangLabTHU)）
+开发的面向长时间尺度分子动力学模拟的大型项目。HDkit 仅包含 DLTS 中与超动力学
+相关的代码，并进行了精简以便于使用和复现。
+
+HDkit 和 DLTS 中的超动力学相关代码由
+**[PhoenixQian](https://github.com/PhoenixQian)**（[649811459@qq.com](mailto:649811459@qq.com)）编写。
+
+> **论文状态**：本仓库是论文的小型配套项目，论文目前处于投稿阶段。
+> 论文链接和引用格式将在发表后更新。
+
+---
+
 > **注意**：HDkit 是论文中算法的**简化参考实现**。它专注于核心方法的正确性；
 > 一些工程细节（错误恢复、MPI 支持、生产级 I/O）被刻意保持最小化。
 > 示例中的模拟时长（BB: 10 ns; MMF/J-MMF: 100 ps）设置为让用户能在
@@ -22,6 +40,7 @@
 
 ## 目录
 
+- [关于](#关于)
 - [快速开始](#快速开始)
   - [获取仓库](#获取仓库)
   - [环境配置](#环境配置)
@@ -51,6 +70,12 @@
 git clone https://github.com/ZhangLabTHU/HDkit-example.git
 cd HDkit-example
 ```
+
+> **Results 分支**：自行运行模拟后，可以切换到 `results` 分支查看预计算的输出文件：
+>
+> ```bash
+> git checkout results
+> ```
 
 仓库包含运行示例所需的一切：
 
