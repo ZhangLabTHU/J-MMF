@@ -2,35 +2,25 @@
 
 [English](README.md) | [简体中文](README.zh-cn.md)
 
-A lightweight, installation-free toolkit for **Hyperdynamics (HD) molecular dynamics** simulations, with a unified runner for Cu(100) surface diffusion.
+A lightweight, installation-free toolkit for **Hyperdynamics (HD) molecular
+dynamics** simulations, with a unified runner for Cu(100) surface diffusion.
 
-> **Operating System**: This toolkit is designed for **Linux and macOS** only. Windows is not supported. Windows users are recommended to install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) (Windows Subsystem for Linux) and run the toolkit inside an Ubuntu environment.
+> **HDkit is a companion code repository for a paper currently under review.**
+> It is intended for reproducing and verifying the paper's results —
+> **not for production simulations.**
+
+> **Operating System**: This toolkit is designed for **Linux and macOS** only.
+> Windows is not supported.  Windows users are recommended to install
+> [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) (Windows
+> Subsystem for Linux) and run the toolkit inside an Ubuntu environment.
 
 This repository accompanies the paper and provides:
 
-- **`HDkit/`** — A streamlined Python package containing the core HD calculators (Bond-Boost, MMF, BasinManager).
-- **`run_compare.py`** — Compares the bias from all three HD methods on the same structure in a single step.
+- **`HDkit/`** — A streamlined Python package containing the core HD calculators
+  (Bond-Boost, MMF, BasinManager).
+- **`run_compare.py`** — Compares the bias from all three HD methods on the same
+  structure in a single step.
 - **`run_hd.py`** — Runs multi-step HD-MD using Bond-Boost, MMF, or J-MMF.
-
----
-
-## About
-
-**HDkit** is a lightweight Hyperdynamics toolkit extracted from
-**[DLTS](https://github.com/ZhangLabTHU)** (Deep Long Time Simulation package),
-a larger project developed by [ZhangLab](https://www.zhanglab-thu.com)
-([@ZhangLabTHU](https://github.com/ZhangLabTHU)) for long-time-scale
-molecular dynamics simulations.  HDkit contains only the Hyperdynamics-related
-code from DLTS, streamlined for ease of use and reproducibility.
-
-The Hyperdynamics code in both HDkit and DLTS was written by
-**[PhoenixQian](https://github.com/PhoenixQian)** ([649811459@qq.com](mailto:649811459@qq.com)).
-
-> **Paper status**: This repository is a small companion project for a paper
-> currently under review.  The paper link and citation format will be added
-> after publication.
-
----
 
 > **Note**: HDkit is a **simplified reference implementation** of the algorithms
 > described in our paper.  It focuses on correctness of the core methods; some
@@ -44,7 +34,6 @@ The Hyperdynamics code in both HDkit and DLTS was written by
 
 ## Table of Contents
 
-- [About](#about)
 - [Getting Started](#getting-started)
   - [Repository Setup](#repository-setup)
   - [Environment Setup](#environment-setup)
@@ -54,6 +43,8 @@ The Hyperdynamics code in both HDkit and DLTS was written by
 - [HD Simulations (`run_hd.py`)](#hd-simulations-run_hdpy)
 - [Output Files](#output-files)
 - [References](#references)
+- [About](#about)
+- [License](#license)
 
 ---
 
@@ -324,12 +315,51 @@ and Lanczos convergence check is recorded.
 
 ## References
 
-1. Voter, A. F. Hyperdynamics: Accelerated molecular dynamics of infrequent events. *Phys. Rev. Lett.* **78**, 3908–3911 (1997).
-2. Miron, R. A. & Fichthorn, K. A. Accelerated molecular dynamics with the Bond-Boost method. *J. Chem. Phys.* **119**, 6210–6216 (2003).
-3. Xiao, P., Duncan, J., Zhang, L. & Henkelman, G. Ridge-based bias potentials to accelerate molecular dynamics. *J. Chem. Phys.* **143**, 244104 (2015).
+1. Voter, A. F. Hyperdynamics: Accelerated molecular dynamics of infrequent
+   events. *Phys. Rev. Lett.* **78**, 3908–3911 (1997).
+2. Miron, R. A. & Fichthorn, K. A. Accelerated molecular dynamics with the
+   Bond-Boost method. *J. Chem. Phys.* **119**, 6210–6216 (2003).
+3. Xiao, P., Duncan, J., Zhang, L. & Henkelman, G. Ridge-based bias potentials
+   to accelerate molecular dynamics. *J. Chem. Phys.* **143**, 244104 (2015).
+
+---
+
+## About
+
+### Background
+
+**HDkit** is a lightweight Hyperdynamics toolkit extracted from
+**[DLTS](https://github.com/ZhangLabTHU/Hyperdynamics)** (Deep Long Time
+Simulation package) — a larger project developed by
+[ZhangLab](https://www.zhanglab-thu.com) for long-time-scale dynamics
+simulations.  DLTS encompasses multiple methods spanning both molecular
+dynamics (Hyperdynamics) and adaptive kinetic Monte Carlo (aKMC).  HDkit
+contains only the Hyperdynamics-related code from DLTS, streamlined for
+ease of use and reproducibility.
+
+- **ZhangLab homepage**: <https://www.zhanglab-thu.com>
+- **ZhangLab on GitHub**: [@ZhangLabTHU](https://github.com/ZhangLabTHU)
+
+### Authorship
+
+The Hyperdynamics code in both HDkit and DLTS was written by
+**[PhoenixQian](https://github.com/PhoenixQian)**.
+
+- **Email**: [649811459@qq.com](mailto:649811459@qq.com)
+- **GitHub**: <https://github.com/PhoenixQian>
+
+### Paper Status
+
+This repository is a companion to a paper currently under review.
+The paper link and recommended citation format will be added here
+after publication.
 
 ---
 
 ## License
 
-This code is provided for academic research purposes. Please cite the relevant references if you use this toolkit in your work.
+This code is provided **solely for verifying and reproducing the results
+of the accompanying paper**.  It is a simplified reference implementation
+and is **not intended for production molecular dynamics simulations**.
+Please cite the relevant references (see above) if you use this toolkit
+in your work.

@@ -2,45 +2,31 @@
 
 [English](README.md) | [简体中文](README.zh-cn.md)
 
-一套轻量级、免安装的**超动力学 (Hyperdynamics, HD) 分子动力学**模拟工具包，为 Cu(100) 表面扩散提供了统一的运行程序。
+一套轻量级、免安装的**超动力学 (Hyperdynamics, HD) 分子动力学**模拟工具包，
+为 Cu(100) 表面扩散提供了统一的运行程序。
 
-> **操作系统**：本工具包仅支持 **Linux 和 macOS**。Windows 用户请先安装 [WSL](https://learn.microsoft.com/zh-cn/windows/wsl/install)。
+> **HDkit 是一篇论文的配套代码仓库，该论文目前处于投稿阶段。**
+> 本仓库仅用于复现和验证论文结果——**不适用于生产级模拟。**
 
-本仓库附带论文提供以下内容：
+> **操作系统**：本工具包仅支持 **Linux 和 macOS**。Windows 用户请先安装
+> [WSL](https://learn.microsoft.com/zh-cn/windows/wsl/install)。
+
+本仓库作为论文的补充材料，提供以下内容：
 
 - **`HDkit/`** — 精简的 Python 包，包含核心 HD 计算器（Bond-Boost、MMF、BasinManager）
 - **`run_compare.py`** — 在同一结构上对比三种 HD 方法的偏置（单步评估）
 - **`run_hd.py`** — 使用 Bond-Boost、MMF 或 J-MMF 运行多步 HD-MD
 
----
-
-## 关于
-
-**HDkit** 是从 **[DLTS](https://github.com/ZhangLabTHU)**（Deep Long Time Simulation package，
-深度长时模拟包）中提取的轻量级超动力学工具包。DLTS 是由
-[ZhangLab](https://www.zhanglab-thu.com)（[@ZhangLabTHU](https://github.com/ZhangLabTHU)）
-开发的面向长时间尺度分子动力学模拟的大型项目。HDkit 仅包含 DLTS 中与超动力学
-相关的代码，并进行了精简以便于使用和复现。
-
-HDkit 和 DLTS 中的超动力学相关代码由
-**[PhoenixQian](https://github.com/PhoenixQian)**（[649811459@qq.com](mailto:649811459@qq.com)）编写。
-
-> **论文状态**：本仓库是论文的小型配套项目，论文目前处于投稿阶段。
-> 论文链接和引用格式将在发表后更新。
-
----
-
 > **注意**：HDkit 是论文中算法的**简化参考实现**。它专注于核心方法的正确性；
 > 一些工程细节（错误恢复、MPI 支持、生产级 I/O）被刻意保持最小化。
 > 示例中的模拟时长（BB: 10 ns; MMF/J-MMF: 100 ps）设置为让用户能在
-> 几分钟到几小时内验证代码能否运行——论文中报告的结果需要
+> 几分钟到几小时内验证代码能否从头跑到尾——论文中报告的结果需要
 > 在 HPC 资源上进行更长时间（µs 量级）的运行。
 
 ---
 
 ## 目录
 
-- [关于](#关于)
 - [快速开始](#快速开始)
   - [获取仓库](#获取仓库)
   - [环境配置](#环境配置)
@@ -50,6 +36,8 @@ HDkit 和 DLTS 中的超动力学相关代码由
 - [HD 模拟 (`run_hd.py`)](#hd-模拟-run_hdpy)
 - [输出文件](#输出文件)
 - [参考文献](#参考文献)
+- [关于](#关于)
+- [许可](#许可)
 
 ---
 
@@ -300,12 +288,46 @@ python run_hd.py j-mmf     # J-MMF Shear  (J_algo="h", 推荐)
 
 ## 参考文献
 
-1. Voter, A. F. Hyperdynamics: Accelerated molecular dynamics of infrequent events. *Phys. Rev. Lett.* **78**, 3908–3911 (1997).
-2. Miron, R. A. & Fichthorn, K. A. Accelerated molecular dynamics with the Bond-Boost method. *J. Chem. Phys.* **119**, 6210–6216 (2003).
-3. Xiao, P., Duncan, J., Zhang, L. & Henkelman, G. Ridge-based bias potentials to accelerate molecular dynamics. *J. Chem. Phys.* **143**, 244104 (2015).
+1. Voter, A. F. Hyperdynamics: Accelerated molecular dynamics of infrequent
+   events. *Phys. Rev. Lett.* **78**, 3908–3911 (1997).
+2. Miron, R. A. & Fichthorn, K. A. Accelerated molecular dynamics with the
+   Bond-Boost method. *J. Chem. Phys.* **119**, 6210–6216 (2003).
+3. Xiao, P., Duncan, J., Zhang, L. & Henkelman, G. Ridge-based bias potentials
+   to accelerate molecular dynamics. *J. Chem. Phys.* **143**, 244104 (2015).
+
+---
+
+## 关于
+
+### 项目背景
+
+**HDkit** 是从 **[DLTS](https://github.com/ZhangLabTHU/Hyperdynamics)**（Deep
+Long Time Simulation package，深度长时模拟包）中提取的轻量级超动力学工具包。
+DLTS 是由 [ZhangLab](https://www.zhanglab-thu.com) 开发的面向长时间尺度
+动力学模拟的大型项目，涵盖分子动力学（Hyperdynamics）和自适应动力学蒙特卡洛
+（aKMC）等多个方向。HDkit 仅包含 DLTS 中与超动力学相关的代码，并进行了精简
+以便于使用和复现。
+
+- **ZhangLab 主页**：<https://www.zhanglab-thu.com>
+- **ZhangLab GitHub**：[@ZhangLabTHU](https://github.com/ZhangLabTHU)
+
+### 作者
+
+HDkit 和 DLTS 中的超动力学相关代码由
+**[PhoenixQian](https://github.com/PhoenixQian)** 编写。
+
+- **邮箱**：[649811459@qq.com](mailto:649811459@qq.com)
+- **GitHub**：<https://github.com/PhoenixQian>
+
+### 论文状态
+
+本仓库为一篇论文的配套代码，该论文目前处于投稿阶段。
+论文链接和推荐引用格式将在发表后更新于此。
 
 ---
 
 ## 许可
 
-本代码仅用于学术研究目的。如果在工作中使用此工具包，请引用相关参考文献。
+本代码**仅用于验证和复现配套论文的结果**。它是一个简化的参考实现，
+**不适用于生产级分子动力学模拟**。如果在工作中使用了本工具包，
+请引用上述参考文献。
