@@ -13,17 +13,19 @@ This repository accompanies the paper and provides:
 > **Note**: HDkit is a **simplified reference implementation** of the algorithms
 > described in our paper.  It focuses on correctness of the core methods; some
 > engineering details (error recovery, MPI support, production-grade I/O) are
-> deliberately kept minimal.  The simulation lengths in the examples (10 ps)
-> are chosen so that users can verify the code runs end-to-end in
-> minutes — the results reported in the paper require substantially longer
-> runs (ns–µs scale) on HPC resources.
+> deliberately kept minimal.  The simulation lengths in the examples
+> (BB: 10 ns; MMF/J-MMF: 100 ps) are chosen so that users can verify the
+> code runs end-to-end in minutes to hours — the results reported in
+> the paper require substantially longer runs (µs scale) on HPC resources.
 
 ---
 
 ## Table of Contents
 
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
+- [Getting Started](#getting-started)
+  - [Repository Setup](#repository-setup)
+  - [Environment Setup](#environment-setup)
+  - [Verify Installation](#verify-installation)
 - [Repository Structure](#repository-structure)
 - [Bias Comparison (`run_compare.py`)](#bias-comparison-run_comparepy)
 - [HD Simulations (`run_hd.py`)](#hd-simulations-run_hdpy)
@@ -32,7 +34,34 @@ This repository accompanies the paper and provides:
 
 ---
 
-## Prerequisites
+## Getting Started
+
+### Repository Setup
+
+Clone the repository and enter the project directory:
+
+```bash
+git clone https://github.com/ZhangLabTHU/HDkit.git
+cd HDkit
+```
+
+The repository contains everything needed to run the examples:
+
+| File / Directory | Purpose |
+|---|---|
+| `HDkit/` | Core HD calculator library (no `pip install` needed) |
+| `run_hd.py` | Multi-step HD-MD runner |
+| `run_compare.py` | Single-step bias comparison |
+| `verify.py` | Environment verification |
+| `hd-ini.traj` | Initial structure for HD simulations |
+| `compare-ini.traj` | Initial structure for bias comparison |
+| `Cu_u3.eam` | Cu EAM potential file |
+
+> **No installation required** — `HDkit/` is a lightweight package that
+> lives in the project root.  As long as you run scripts from this
+> directory, `import HDkit` works without any path configuration.
+
+### Environment Setup
 
 | Requirement | Minimum Version | Notes |
 |---|---|---|
@@ -40,25 +69,24 @@ This repository accompanies the paper and provides:
 | **ASE** | ≥ 3.22 | For `NoseHooverChainNVT` integrator; includes NumPy as a dependency |
 | **LAMMPS** | with Python bindings | EAM potential solver |
 
-> **Python environment**: We recommend creating a dedicated conda environment.
+> **Operating System**: This toolkit is designed for **Linux and macOS**
+> only.  Windows users should install
+> [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) first.
 
----
-
-## Installation
+We recommend a dedicated conda environment.  Create it with one command:
 
 ```bash
-# 1. Create environment with all dependencies in one step
 conda create -n HDkit -c conda-forge python=3.11 ase lammps -y
-
-# 2. Activate the environment
 conda activate HDkit
 ```
 
-### Verify installation
+### Verify Installation
 
 ```bash
 python verify.py
 ```
+
+If all checks pass, you are ready to run the examples.
 
 ---
 
@@ -176,29 +204,31 @@ Output is written to a subdirectory (`Bond-Boost/`, `MMF/`, or `J_MMF/`).
 
 ### Method summary
 
-| Argument | Method | J_algo | Production | Key feature |
-|---|---|---|---|---|
-| `bb` | Bond-Boost | — | 10 ps | ~1 force-call/step, very efficient |
-| `mmf` | MMF Simple | `"s"` | 10 ps | Ridge forces directly (baseline) |
-| `j-mmf` | J-MMF Shear | `"h"` | 10 ps | Jacobian propagation + orthogonal projection |
+| Argument | Method | emax | Production | loginterval | Key feature |
+|---|---|---|---|---|---|
+| `bb` | Bond-Boost | 0.3 eV | 10 ns | 10000 | ~1 force-call/step, very efficient |
+| `mmf` | MMF Simple | 0.5 eV | 100 ps | 100 | Ridge forces directly (baseline) |
+| `j-mmf` | J-MMF Shear | 0.5 eV | 100 ps | 100 | Jacobian propagation + orthogonal projection |
 
-All runs use 300 K, `emax = 0.3 eV`, 1 fs timestep, Nose–Hoover chain NVT,
-10 ps equilibration (unbiased), and output every frame.
+All runs use 500 K, 1 fs timestep, Nose–Hoover chain NVT thermostat,
+10 ps unbiased equilibration before switching to the HD calculator.
 
-> **Why such short runs?**  The 10 ps durations are **deliberately
-> short** — just enough to verify that the code compiles, imports, and
-> produces output.  The production results reported in the paper require
-> runs on the ns–µs scale, which can take hours to days on HPC resources.
-> If you want to reproduce those results, increase `prod_steps` in
-> `run_hd.py` accordingly.
+> **Simulation times**: The default settings are chosen to balance
+> turnaround time with statistical quality.  Bond-Boost runs 10 ns
+> because it is computationally cheap (~1 force-call per MD step).
+> MMF methods run 100 ps because each HD step involves multiple
+> force evaluations (climb, Hessian diagonalisation).  All timings
+> can be adjusted via `prod_steps` in `run_hd.py`.  The production
+> results reported in the paper require substantially longer runs
+> (ns–µs scale) on HPC resources.
 
 ### Simulation workflow
 
 1. Copy `hd-ini.traj` and `Cu_u3.eam` into the output directory
 2. Read structure → set up LAMMPS EAM calculator (unbiased PES)
 3. Initialise Maxwell–Boltzmann velocities
-4. Equilibrate: NVT at 300 K for 10 ps (unbiased std_calc)
-5. Production: NVT HD-MD for 10 ps (BB, MMF, or J-MMF)
+4. Equilibrate: NVT at 500 K for 10 ps (unbiased std_calc)
+5. Production: NVT HD-MD — 10 ns (BB) or 100 ps (MMF / J-MMF)
 6. Post-process: extract basin transitions → compute ACT
 7. Convert `hd.traj` → `bias_hd.traj` (bias-only for visualisation)
 
