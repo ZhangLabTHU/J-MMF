@@ -186,7 +186,7 @@ METHODS = {
         "label": "MMF (Simple)",
         "is_mmf": True,
         "j_algo": "s",
-        "emax": 0.5,
+        "emax": 0.3,
         "prod_steps": 100000,         # 100 ps
         "sim_time": 100.0,
         "time_unit": "ps",
@@ -198,7 +198,7 @@ METHODS = {
         "label": "J-MMF (Shear)",
         "is_mmf": True,
         "j_algo": "h",
-        "emax": 0.5,
+        "emax": 0.3,
         "prod_steps": 100000,         # 100 ps
         "sim_time": 100.0,
         "time_unit": "ps",
