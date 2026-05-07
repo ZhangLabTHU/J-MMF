@@ -45,15 +45,6 @@
 
 ### 获取仓库
 
-**方式一 —— 下载 Release**（无需 Git）：
-
-> [![Release](https://img.shields.io/github/v/release/ZhangLabTHU/J-MMF?color=blue)](https://github.com/ZhangLabTHU/J-MMF/releases)
->
-> 前往 [Releases 页面](https://github.com/ZhangLabTHU/J-MMF/releases)
-> 下载 `J-MMF-v1.0.0.zip` 或 `.tar.gz`，解压后进入目录即可使用。
-
-**方式二 —— 通过 Git 克隆**：
-
 ```bash
 git clone https://github.com/ZhangLabTHU/J-MMF.git
 cd J-MMF
@@ -71,8 +62,6 @@ cd J-MMF
 | `F1.traj` | 备选初始结构（F1 体系，较小 —— 保留供参考） |
 | `F201.traj` | 备选初始结构（F201 体系，较大 —— 稍后加入） |
 | `Cu_u3.eam` | Cu EAM 势文件 |
-| `CHANGELOG.md` | 发布说明 |
-| `Makefile` | 构建 Release 包 (`make release`) |
 
 > **无需安装**。`HDkit/` 位于项目根目录，从此目录运行脚本即可直接
 > `import HDkit`，无需配置路径。
@@ -126,9 +115,7 @@ python verify.py
 ├── F201.traj                       #   备选初始结构（F201 体系，较大 —— 稍后加入）
 ├── Cu_u3.eam                       #   Cu EAM 势文件
 ├── README.md                       #   英文文档
-├── README.zh-CN.md                 #   中文文档
-├── CHANGELOG.md                    #   发布说明
-└── Makefile                        #   构建 Release 包 (`make release`)
+└── README.zh-CN.md                 #   中文文档
 ```
 
 运行后，输出文件写入对应子目录（`Climb/`、`Bond-Boost/`、`MMF/` 或 `J_MMF/`）。

@@ -50,16 +50,6 @@ This repository accompanies the paper and includes:
 
 ### Repository Setup
 
-**Option 1 — Download a release** (no Git needed):
-
-> [![Release](https://img.shields.io/github/v/release/ZhangLabTHU/J-MMF?color=blue)](https://github.com/ZhangLabTHU/J-MMF/releases)
->
-> Go to the [Releases page](https://github.com/ZhangLabTHU/J-MMF/releases),
-> download `J-MMF-v1.0.0.zip` or `.tar.gz`, extract, and enter the
-> directory.
-
-**Option 2 — Clone with Git**:
-
 ```bash
 git clone https://github.com/ZhangLabTHU/J-MMF.git
 cd J-MMF
@@ -77,8 +67,6 @@ The repository contains everything needed to run the examples:
 | `F1.traj` | Alternative initial structure (F1 system, smaller — kept for reference) |
 | `F201.traj` | Alternative initial structure (F201 system, larger — coming soon) |
 | `Cu_u3.eam` | Cu EAM potential file |
-| `CHANGELOG.md` | Release notes |
-| `Makefile` | Build release archives (`make release`) |
 
 > **No installation required**.  `HDkit/` lives in the project root and
 > `import HDkit` works as long as you run scripts from this directory.
@@ -136,9 +124,7 @@ If all checks pass, you are ready to go.
 ├── F201.traj                       #   Alternative structure (F201 system, larger — coming soon)
 ├── Cu_u3.eam                       #   Cu EAM potential file
 ├── README.md                       #   English documentation
-├── README.zh-CN.md                 #   中文文档
-├── CHANGELOG.md                    #   Release notes
-└── Makefile                        #   Build release archives (`make release`)
+└── README.zh-CN.md                 #   中文文档
 ```
 
 After a run, output files are written to a subdirectory (`Climb/`, `Bond-Boost/`, `MMF/`, or `J_MMF/`).
