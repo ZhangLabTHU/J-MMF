@@ -231,7 +231,7 @@ if __name__ == "__main__":
     cfg = METHODS[method_key]
 
     # ── setup output directory ──
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    script_dir = os.getcwd()
     work_dir = os.path.join(script_dir, cfg["dir"])
     os.makedirs(work_dir, exist_ok=True)
 
