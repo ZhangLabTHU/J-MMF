@@ -1,11 +1,11 @@
-# HDkit — Hyperdynamics Example Suite
+# J-MMF — Hyperdynamics Example Suite
 
 [English](README.md) | [简体中文](README.zh-cn.md)
 
 A lightweight, installation-free toolkit for **Hyperdynamics (HD) molecular
 dynamics** simulations, with a unified runner for Cu(100) surface diffusion.
 
-> **HDkit is companion code for a paper currently under review.**
+> **J-MMF is companion code for a paper currently under review.**
 > It is provided to reproduce and verify the paper's results —
 > **not for production simulations.**
 
@@ -52,25 +52,18 @@ This repository accompanies the paper and includes:
 
 **Option 1 — Download a release** (no Git needed):
 
-> [![Release](https://img.shields.io/github/v/release/ZhangLabTHU/HDkit-example?color=blue)](https://github.com/ZhangLabTHU/HDkit-example/releases)
+> [![Release](https://img.shields.io/github/v/release/ZhangLabTHU/J-MMF?color=blue)](https://github.com/ZhangLabTHU/J-MMF/releases)
 >
-> Go to the [Releases page](https://github.com/ZhangLabTHU/HDkit-example/releases),
-> download `HDkit-example-v1.0.0.zip` or `.tar.gz`, extract, and enter the
+> Go to the [Releases page](https://github.com/ZhangLabTHU/J-MMF/releases),
+> download `J-MMF-v1.0.0.zip` or `.tar.gz`, extract, and enter the
 > directory.
 
 **Option 2 — Clone with Git**:
 
 ```bash
-git clone https://github.com/ZhangLabTHU/HDkit-example.git
-cd HDkit-example
+git clone https://github.com/ZhangLabTHU/J-MMF.git
+cd J-MMF
 ```
-
-> **Results branch**: After running the simulations yourself, you can check out
-> the `results` branch to see the pre-computed output files:
->
-> ```bash
-> git checkout results
-> ```
 
 The repository contains everything needed to run the examples:
 
@@ -105,8 +98,8 @@ The repository contains everything needed to run the examples:
 We recommend a dedicated conda environment:
 
 ```bash
-conda create -n HDkit -c conda-forge python=3.11 ase lammps -y
-conda activate HDkit
+conda create -n J-MMF -c conda-forge python=3.11 ase lammps -y
+conda activate J-MMF
 ```
 
 ### Verify Installation
@@ -223,7 +216,7 @@ production, and post-processing — for any of the three methods.
 > is accessible.
 >
 > ```bash
-> conda activate HDkit
+> conda activate J-MMF
 > ```
 
 All examples are launched from the **project root**.  No `pip install` or
@@ -331,7 +324,7 @@ and Lanczos convergence check is recorded.
 
 ### Background
 
-**HDkit** is a lightweight Hyperdynamics toolkit extracted from
+**J-MMF** is a lightweight Hyperdynamics toolkit extracted from
 **[DLTS](https://github.com/ZhangLabTHU/Hyperdynamics)** (Deep Long Time
 Simulation package), a larger project developed by
 [ZhangLab](https://www.zhanglab-thu.com) for long-time-scale dynamics
@@ -345,7 +338,7 @@ of use and reproducibility.
 
 ### Authorship
 
-The Hyperdynamics code in both HDkit and DLTS was written by
+The Hyperdynamics code in both J-MMF and DLTS was written by
 **[PhoenixQian](https://github.com/PhoenixQian)**.
 
 - **Email**: [649811459@qq.com](mailto:649811459@qq.com)

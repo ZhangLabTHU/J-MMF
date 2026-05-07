@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the HDkit-example project are documented in this file.
+All notable changes to the J-MMF project are documented in this file.
 
 ---
 
@@ -8,7 +8,7 @@ All notable changes to the HDkit-example project are documented in this file.
 
 ### First Public Release 🎉
 
-This is the initial release of **HDkit-example**, a lightweight, installation-free
+This is the initial release of **J-MMF**, a lightweight, installation-free
 toolkit for Hyperdynamics (HD) molecular dynamics simulations, accompanying the
 paper on Cu(100) surface diffusion.
 

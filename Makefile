@@ -1,10 +1,10 @@
-# ── HDkit-example Makefile ──
+# ── J-MMF Makefile ──
 # Usage:
 #   make release          Build release archives from current HEAD
 #   make clean-release    Remove generated archives
 
 VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
-NAME    := HDkit-example
+NAME    := J-MMF
 TAG     := $(VERSION)
 
 .PHONY: release clean-release
