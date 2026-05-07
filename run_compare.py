@@ -14,7 +14,7 @@ Usage
 
 Output (in Climb/)
 ------------------
-compare-ini.traj    Starting structure with std_calc energy & forces
+F19.traj           Starting structure (F19 system) with std_calc energy & forces
 hyper-bb.traj      Bond-Boost    total energy & forces (E_std + E_bias)
 hyper-mmf.traj     MMF Simple    total energy & forces
 hyper-j-mmf.traj   J-MMF Shear   total energy & forces
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     work_dir = os.path.join(script_dir, "Climb")
     os.makedirs(work_dir, exist_ok=True)
 
-    for fname in ("compare-ini.traj", "Cu_u3.eam"):
+    for fname in ("F19.traj", "Cu_u3.eam"):
         src = os.path.join(script_dir, fname)
         dst = os.path.join(work_dir, fname)
         if os.path.isfile(src) and not os.path.isfile(dst):
@@ -108,10 +108,10 @@ if __name__ == "__main__":
 
     # ── clean stale logs from previous runs ──
     os.system("rm -f Bond.log climb.log climb.traj rlx.log mode.log"
-              " compare-ini.traj hyper-*.traj bias-*.traj climb-*.traj")
+              " F19.traj hyper-*.traj bias-*.traj climb-*.traj")
 
     # ── step 0: evaluate std_calc on the starting structure ──
-    atoms = read("../compare-ini.traj")
+    atoms = read("../F19.traj")
     calc = make_lammps_calc()
     atoms.calc = calc
     e_std = atoms.get_potential_energy()
@@ -122,8 +122,8 @@ if __name__ == "__main__":
         atoms_std,
         energy=atoms.get_potential_energy(),
         forces=atoms.get_forces().copy())
-    write("compare-ini.traj", atoms_std)
-    print(f"# Saved std_calc result to compare-ini.traj")
+    write("F19.traj", atoms_std)
+    print(f"# Saved std_calc result to F19.traj")
 
     # ── results table ──
     header = f"  {'Method':<16s} {'E_bias (eV)':>14s} {'|F_bias| (eV/Å)':>18s}"
@@ -180,7 +180,7 @@ if __name__ == "__main__":
 
     print("  " + "-" * (len(header) - 2))
     print(f"\n# Output written to {work_dir}/")
-    print(f"#   compare-ini.traj")
+    print(f"#   F19.traj")
     print(f"#   hyper-bb.traj     hyper-mmf.traj     hyper-j-mmf.traj")
     print(f"#   bias-bb.traj      bias-mmf.traj      bias-j-mmf.traj")
     print(f"#   climb-mmf.traj    climb-j-mmf.traj")

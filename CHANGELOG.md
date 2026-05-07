@@ -22,7 +22,7 @@ paper on Cu(100) surface diffusion.
 - `run_hd.py` — Unified multi-step HD-MD runner
 - `run_compare.py` — Single-step bias comparison across all methods
 - `verify.py` — Environment verification script
-- `hd-ini.traj` / `compare-ini.traj` — Initial structures
+- `F19.traj` / `F1.traj` — Initial structures
 - `Cu_u3.eam` — Cu EAM potential file
 - `README.md` / `README.zh-CN.md` — English & Chinese documentation
 

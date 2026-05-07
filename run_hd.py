@@ -236,7 +236,7 @@ if __name__ == "__main__":
     os.makedirs(work_dir, exist_ok=True)
 
     # copy input files into the work directory
-    for fname in ("hd-ini.traj", "Cu_u3.eam"):
+    for fname in ("F19.traj", "Cu_u3.eam"):
         src = os.path.join(script_dir, fname)
         dst = os.path.join(work_dir, fname)
         if os.path.isfile(src) and not os.path.isfile(dst):
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     tdamp = 100 * units.fs
 
     # ── read structure ──
-    atoms = read("hd-ini.traj")
+    atoms = read("F19.traj")
     real_dof = atoms.get_number_of_degrees_of_freedom()
     fixed_indices = (atoms.constraints[0].get_indices()
                      if atoms.constraints else [])

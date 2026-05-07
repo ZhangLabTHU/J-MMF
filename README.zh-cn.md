@@ -73,8 +73,9 @@ cd HDkit-example
 | `run_hd.py` | 多步 HD-MD 运行器 |
 | `run_compare.py` | 单步偏置对比 |
 | `verify.py` | 环境验证脚本 |
-| `hd-ini.traj` | HD 模拟初始结构 |
-| `compare-ini.traj` | 偏置对比初始结构 |
+| `F19.traj` | `run_hd.py` 和 `run_compare.py` 共用的初始结构（F19 体系） |
+| `F1.traj` | 备选初始结构（F1 体系，较小 —— 保留供参考） |
+| `F201.traj` | 备选初始结构（F201 体系，较大 —— 稍后加入） |
 | `Cu_u3.eam` | Cu EAM 势文件 |
 | `CHANGELOG.md` | 发布说明 |
 | `Makefile` | 构建 Release 包 (`make release`) |
@@ -126,8 +127,9 @@ python verify.py
 ├── run_hd.py                       # ← 多步 HD-MD 运行器 (bb | mmf | j-mmf)
 ├── run_compare.py                  # ← 单步偏置对比
 ├── verify.py                       #   安装验证脚本
-├── compare-ini.traj                #   偏置对比用初始结构
-├── hd-ini.traj                     #   HD-MD 用初始结构
+├── F19.traj                        #   共用初始结构（F19 体系）
+├── F1.traj                         #   备选初始结构（F1 体系，较小）
+├── F201.traj                       #   备选初始结构（F201 体系，较大 —— 稍后加入）
 ├── Cu_u3.eam                       #   Cu EAM 势文件
 ├── README.md                       #   英文文档
 ├── README.zh-CN.md                 #   中文文档
@@ -151,9 +153,11 @@ python verify.py
 
 ## 偏置对比（`run_compare.py`）
 
-`run_compare.py` 对**同一初始结构**（`compare-ini.traj`）分别应用三种 HD 方法，
+`run_compare.py` 对**同一初始结构**（`F19.traj`）分别应用三种 HD 方法，
 输出每种方法产生的偏置能量和力的大小。这是一次**单步评估**（不执行 MD 积分），
 方便你快速对比三种方法对同一原子构型的响应。
+
+默认初始结构（`F19.traj`）为 F19 体系，可展示方法在较多自由度下的行为。
 
 ```bash
 python run_compare.py
@@ -163,7 +167,7 @@ python run_compare.py
 
 | 文件 | 内容 |
 |---|---|
-| `compare-ini.traj` | 含 std_calc 能量和力的初始结构 |
+| `F19.traj` | 含 std_calc 能量和力的初始结构 |
 | `hyper-bb.traj` | Bond-Boost — 总（有偏）能量和力 |
 | `hyper-mmf.traj` | MMF Simple — 总能量和力 |
 | `hyper-j-mmf.traj` | J-MMF Shear — 总能量和力 |
@@ -192,7 +196,7 @@ MMF 方法使用 `emax = −1`（无能量上限），爬升可到达势脊。
 
 ## HD 模拟（`run_hd.py`）
 
-`run_hd.py` 从 `hd-ini.traj` 开始执行完整的超动力学 MD 模拟，演示了三种方法的
+`run_hd.py` 从 `F19.traj` 开始执行完整的超动力学 MD 模拟，演示了三种方法的
 完整工作流 —— 平衡、偏置加速生产、后处理。
 
 > **运行前**：激活 Python 环境并确保 LAMMPS 可访问。
@@ -232,7 +236,7 @@ python run_hd.py j-mmf     # J-MMF Shear  (J_algo="h", 推荐)
 
 ### 模拟工作流
 
-1. 将 `hd-ini.traj` 和 `Cu_u3.eam` 复制到输出目录
+1. 将 `F19.traj` 和 `Cu_u3.eam` 复制到输出目录
 2. 读取结构 → 设置 LAMMPS EAM 计算器（无偏势能面）
 3. 初始化 Maxwell–Boltzmann 速度
 4. 平衡阶段：500 K 下 NVT 10 ps（使用无偏 std_calc）
@@ -273,7 +277,7 @@ python run_hd.py j-mmf     # J-MMF Shear  (J_algo="h", 推荐)
 | `hyper-bb.traj` / `hyper-mmf.traj` / `hyper-j-mmf.traj` | 总（有偏）能量和力 |
 | `bias-bb.traj` / `bias-mmf.traj` / `bias-j-mmf.traj` | 仅偏置能量和力 |
 | `climb-mmf.traj` / `climb-j-mmf.traj` | 完整爬升路径轨迹（仅 MMF） |
-| `compare-ini.traj` | 含 std_calc 能量和力的初始结构 |
+| `F19.traj` | 含 std_calc 能量和力的初始结构 |
 | `rlx.log` | BasinManager — 每次势阱识别的每一步优化 |
 | `climb.log` | MMF — 每次爬升步骤（步号、能量、势阱 ID、时间） |
 | `mode.log` | MinModeCalculator — Lanczos 迭代细节和收敛情况 |

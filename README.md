@@ -80,8 +80,9 @@ The repository contains everything needed to run the examples:
 | `run_hd.py` | Multi-step HD-MD runner |
 | `run_compare.py` | Single-step bias comparison |
 | `verify.py` | Environment verification |
-| `hd-ini.traj` | Initial structure for HD simulations |
-| `compare-ini.traj` | Initial structure for bias comparison |
+| `F19.traj` | Shared initial structure (F19 system) for both `run_hd.py` and `run_compare.py` |
+| `F1.traj` | Alternative initial structure (F1 system, smaller — kept for reference) |
+| `F201.traj` | Alternative initial structure (F201 system, larger — coming soon) |
 | `Cu_u3.eam` | Cu EAM potential file |
 | `CHANGELOG.md` | Release notes |
 | `Makefile` | Build release archives (`make release`) |
@@ -137,8 +138,9 @@ If all checks pass, you are ready to go.
 ├── run_hd.py                       # ← Multi-step HD-MD runner (bb | mmf | j-mmf)
 ├── run_compare.py                  # ← Single-step bias comparison
 ├── verify.py                       #   Installation verification script
-├── compare-ini.traj                #   Starting structure for bias comparison
-├── hd-ini.traj                     #   Starting structure for HD-MD
+├── F19.traj                        #   Shared initial structure (F19 system)
+├── F1.traj                         #   Alternative structure (F1 system, smaller)
+├── F201.traj                       #   Alternative structure (F201 system, larger — coming soon)
 ├── Cu_u3.eam                       #   Cu EAM potential file
 ├── README.md                       #   English documentation
 ├── README.zh-CN.md                 #   中文文档
@@ -163,10 +165,14 @@ After a run, output files are written to a subdirectory (`Climb/`, `Bond-Boost/`
 ## Bias Comparison (`run_compare.py`)
 
 `run_compare.py` applies all three HD methods to the **same starting
-structure** (`compare-ini.traj`) and reports the bias energy and force
+structure** (`F19.traj`) and reports the bias energy and force
 magnitude produced by each.  This is a single-step evaluation — no MD
 integration — designed to let you quickly compare how the three methods
 respond to the same atomic configuration.
+
+The default initial structure (`F19.traj`) is an F19 system,
+demonstrating the methods' behaviour on a system with many degrees of
+freedom.
 
 ```bash
 python run_compare.py
@@ -176,7 +182,7 @@ Output is written to `Climb/`:
 
 | File | Content |
 |---|---|
-| `compare-ini.traj` | Starting structure with std_calc energy & forces |
+| `F19.traj` | Starting structure with std_calc energy & forces |
 | `hyper-bb.traj` | Bond-Boost — total (biased) energy & forces |
 | `hyper-mmf.traj` | MMF Simple — total energy & forces |
 | `hyper-j-mmf.traj` | J-MMF Shear — total energy & forces |
@@ -209,7 +215,7 @@ the disk with millions of log lines during long MD simulations.
 
 ## HD Simulations (`run_hd.py`)
 
-`run_hd.py` runs full multi-step hyperdynamics MD starting from `hd-ini.traj`.
+`run_hd.py` runs full multi-step hyperdynamics MD starting from `F19.traj`.
 It demonstrates the complete workflow — equilibration, bias-accelerated
 production, and post-processing — for any of the three methods.
 
@@ -255,7 +261,7 @@ All runs use 500 K, 1 fs timestep, Nose–Hoover chain NVT thermostat,
 
 ### Simulation workflow
 
-1. Copy `hd-ini.traj` and `Cu_u3.eam` into the output directory
+1. Copy `F19.traj` and `Cu_u3.eam` into the output directory
 2. Read structure → set up LAMMPS EAM calculator (unbiased PES)
 3. Initialise Maxwell–Boltzmann velocities
 4. Equilibrate: NVT at 500 K for 10 ps (unbiased std_calc)
@@ -297,7 +303,7 @@ and Lanczos convergence check is recorded.
 | `hyper-bb.traj` / `hyper-mmf.traj` / `hyper-j-mmf.traj` | Total (biased) energy & forces |
 | `bias-bb.traj` / `bias-mmf.traj` / `bias-j-mmf.traj` | Bias-only energy & forces |
 | `climb-mmf.traj` / `climb-j-mmf.traj` | Full climbing-path trajectory (MMF only) |
-| `compare-ini.traj` | Starting structure with std_calc energy & forces |
+| `F19.traj` | Starting structure with std_calc energy & forces |
 | `rlx.log` | BasinManager — every optimisation step per basin identification |
 | `climb.log` | MMF — every climbing step (step, energy, basin ID, time) |
 | `mode.log` | MinModeCalculator — Lanczos iteration details and convergence |
